@@ -18,11 +18,12 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $generatedCmd = Join-Path $root "serve-$Port.generated.cmd"
+$generatedVbs = Join-Path $root "serve-$Port.generated.vbs"
 $shortcutName = "claude-zed-shim-$Port.lnk"
 $shortcut = Join-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup" $shortcutName
 
 if ($Uninstall) {
-    foreach ($candidate in @($shortcut, $generatedCmd)) {
+    foreach ($candidate in @($shortcut, $generatedCmd, $generatedVbs)) {
         if (Test-Path $candidate) {
             Remove-Item $candidate -Force
             Write-Host "Removed $candidate"
@@ -53,20 +54,24 @@ if (-not $Startup) {
     return
 }
 
-$cliArgs = "serve --port $Port"
+$cliArgs = "dist\cli.js serve --port $Port"
 if ($ConfigDir.Trim()) { $cliArgs = "$cliArgs --config-dir `"$($ConfigDir.Trim())`"" }
 $cliArgs = "$cliArgs --provider-id $ProviderId"
 
-$cmdContent = "@echo off`r`ncd /d `"$root`"`r`nstart `"`" /min node dist\cli.js $cliArgs`r`n"
-Set-Content -Path $generatedCmd -Value $cmdContent -Encoding ASCII
+$vbsUserArgs = $cliArgs.Replace('"', '""')
+$template = 'Set WshShell = CreateObject("WScript.Shell")' + "`r`n" +
+    'WshShell.CurrentDirectory = "{0}"' + "`r`n" +
+    'WshShell.Run "node {1}", 0, False'
+$vbsContent = $template -f ($root.Replace('"', '""')), $vbsUserArgs
+Set-Content -Path $generatedVbs -Value $vbsContent -Encoding ASCII
 
 $shell = New-Object -ComObject WScript.Shell
 $lnk = $shell.CreateShortcut($shortcut)
-$lnk.TargetPath = "$env:ComSpec"
-$lnk.Arguments = "/c `"$generatedCmd`""
+$lnk.TargetPath = "$env:WINDIR\System32\wscript.exe"
+$lnk.Arguments = "`"$generatedVbs`""
 $lnk.WorkingDirectory = $root
 $lnk.WindowStyle = 7
 $lnk.Save()
 
-Write-Host "Registered claude-zed-shim on port $Port at password-on (shortcut: $shortcut)."
+Write-Host "Registered claude-zed-shim on port $Port at password-on, hidden (shortcut: $shortcut)."
 Write-Host "Remove later with: .\scripts\install.ps1 -Uninstall -Port $Port"

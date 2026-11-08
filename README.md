@@ -91,7 +91,7 @@ Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process;
 ## Installers
 
 Both installers install dependencies, build, and can self-register the shim:
-- **Windows** — `scripts/install.ps1` (`-Port`, `-ConfigDir`, `-ProviderId`, `-Startup`, `-Uninstall`; `-Startup` drops a per-port `.lnk` in `shell:startup`).
+- **Windows** — `scripts/install.ps1` (`-Port`, `-ConfigDir`, `-ProviderId`, `-Startup`, `-Uninstall`). `-Startup` registers a hidden launcher (`wscript` `.generated.vbs`, no console window, same approach as `start-silent.vbs`): stopping means `stop-windows.cmd` or Task Manager, not a window close.
 
 ```powershell
 .\scripts\install.ps1 -Startup -Port 8124 -ProviderId claude-code-personal
