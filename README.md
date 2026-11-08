@@ -86,7 +86,26 @@ node dist\cli.js models --port 8125 --provider-id claude-code-2
 
 4. Merge into Zed `settings.json` under `language_models.openai_compatible` next to `claude-code`. For the Zed ACP path, duplicate `agent_servers.Claude` as e.g. `Claude (work)` and set `"env": { "CLAUDE_CONFIG_DIR": "%USERPROFILE%\\.claude-account2" }`.
 
-Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process; each instance owns its account.
+Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process; each instance owns its account. The provider id is free — name each instance whatever makes sense for you (`--provider-id claude-code-work`, `claude-code-personal`, …); it is only the key in Zed's `settings.json` / OpenCode's `opencode.json`.
+
+## Installers
+
+Both installers install dependencies, build, and can self-register the shim:
+- **Windows** — `scripts/install.ps1` (`-Port`, `-ConfigDir`, `-ProviderId`, `-Startup`, `-Uninstall`; `-Startup` drops a per-port `.lnk` in `shell:startup`).
+
+```powershell
+.\scripts\install.ps1 -Startup -Port 8124 -ProviderId claude-code-personal
+.\scripts\install.ps1 -Startup -Port 8125 -ConfigDir "$HOME\.claude-account2" -ProviderId claude-code-work
+```
+
+- **macOS** — `scripts/install-mac.sh` (`PORT`, `CONFIG_DIR`, `PROVIDER_ID` env vars; launchd `LaunchAgent` with `KeepAlive`; `install-mac.sh uninstall` removes it).
+
+```sh
+PORT=8124 PROVIDER_ID=claude-code-personal sh scripts/install-mac.sh
+CONFIG_DIR="$HOME/.claude-account2" PORT=8125 PROVIDER_ID=claude-code-work sh scripts/install-mac.sh
+```
+
+For a second account, log it in first (see "Two accounts"), then install its instance with the matching `CONFIG_DIR`.
 
 ## Env knobs
 
