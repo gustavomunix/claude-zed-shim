@@ -1,0 +1,21 @@
+{
+  "language_models": {
+    "openai_compatible": {
+      "claude-code": {
+        "api_url": "http://127.0.0.1:8124/v1",
+        "available_models": [
+          {
+            "name": "claude-sonnet-5-5",
+            "display_name": "Claude Sonnet 5.5",
+            "max_tokens": 200000
+          },
+          {
+            "name": "claude-opus-5-5",
+            "display_name": "Claude Opus 5.5",
+            "max_tokens": 200000
+          }
+        ]
+      }
+    }
+  }
+}
