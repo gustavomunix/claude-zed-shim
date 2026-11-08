@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { fetchModelCatalog, startServer } from "./server.ts";
 import { checkSubscriptionAuth } from "./auth.ts";
 import { resolveClaudeCli } from "./cli-path.ts";
-import { getClaudeModels } from "./models.ts";
+import { getClaudeModels, invalidateModelsCache } from "./models.ts";
 
 export const DEFAULT_PORT = 8124;
 export const DEFAULT_PROVIDER_ID = "claude-code";
@@ -36,6 +36,7 @@ function applyConfigDir(configDir: string | undefined): void {
   if (!configDir) return;
   mkdirSync(configDir, { recursive: true });
   process.env.CLAUDE_CONFIG_DIR = configDir;
+  invalidateModelsCache();
 }
 
 export function defaultMaxTokens(id: string, catalogMax?: number): number {
@@ -93,6 +94,7 @@ async function main(): Promise<void> {
     case "serve": {
       const options = parseCliOptions(rest);
       applyConfigDir(options.configDir);
+      if (options.configDir) console.log(`Account config dir: ${options.configDir}`);
       startServer(options.port);
       break;
     }

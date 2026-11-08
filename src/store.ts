@@ -36,12 +36,15 @@ export type ClaudeSessionBinding = {
 
 const MAX_TURN_BOUNDARIES = 100;
 
+export function configBucket(): string {
+  const cfgDir = (process.env.CLAUDE_CONFIG_DIR || "").trim();
+  return cfgDir ? createHash("sha1").update(cfgDir).digest("hex").slice(0, 12) : "";
+}
+
 function storePath(): string {
   const xdg = process.env.XDG_DATA_HOME;
-  const cfgDir = (process.env.CLAUDE_CONFIG_DIR || "").trim();
-  const bucket = cfgDir ? createHash("sha1").update(cfgDir).digest("hex").slice(0, 12) : "";
   const base = xdg ? xdg : join(homedir(), ".local", "share");
-  return join(base, "claude-zed-shim", bucket, "sessions.json");
+  return join(base, "claude-zed-shim", configBucket(), "sessions.json");
 }
 
 export { storePath };

@@ -54,28 +54,28 @@ Zed requires a non-empty API key for `openai_compatible`: use any dummy value (a
 
 ## Two accounts (optional)
 
-Run two Claude accounts side by side. Second instance is entirely optional — a single-account setup needs nothing below.
+Run two Claude accounts side by side. Second instance is entirely optional — a single-account setup needs nothing below. Note: with `CLAUDE_CONFIG_DIR` set, the shim keeps a separate `sessions.json`/`models.json` under that bucket — conversation bindings from a `CLAUDE_CONFIG_DIR`-less setup won't carry over.
 
-1. Login once with a separate config dir:
+1. Login once with a separate config dir (PowerShell):
 
 ```powershell
-set CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-account2
-claude auth login
-set CLAUDE_CONFIG_DIR=
+$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-account2"
+claude auth login --claudeai
+Remove-Item Env:\CLAUDE_CONFIG_DIR
 ```
 
 2. Start a second shim instance on another port (same repo):
 
 ```powershell
-set CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-account2
+$env:CLAUDE_CONFIG_DIR = "$env:USERPROFILE\.claude-account2"
 node dist\cli.js serve --port 8125 --provider-id claude-code-2
 ```
 
-Or via the runners (each runner picks up the env you set at launch):
+Or via the runners (each runner picks up the env you set at launch, CMD or PowerShell):
 
 ```powershell
-set CLAUDE_ZED_SHIM_PORT=8125
-start-windows.cmd
+$env:CLAUDE_ZED_SHIM_PORT = "8125"
+.\start-windows.cmd
 ```
 
 3. Print the Zed snippet for the second provider:

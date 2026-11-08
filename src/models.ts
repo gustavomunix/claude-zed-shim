@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { listClaudeSupportedModels } from "./sdk.ts";
+import { configBucket } from "./store.ts";
 
 export const FAST_MODEL_SUFFIX = ":fast";
 export const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"] as const;
@@ -131,9 +132,13 @@ export function setDiscoveredModels(models: ClaudeModel[]): boolean {
   return changed;
 }
 
-function modelCachePath(): string {
+export function modelCachePath(): string {
   const base = process.env.XDG_DATA_HOME || join(homedir(), ".local", "share");
-  return join(base, "claude-zed-shim", "models.json");
+  return join(base, "claude-zed-shim", configBucket(), "models.json");
+}
+
+export function invalidateModelsCache(): void {
+  discovered = readCachedModels();
 }
 
 function readCachedModels(): ClaudeModel[] | null {
