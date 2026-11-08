@@ -261,7 +261,11 @@ export async function startClaudeQuery(params: StartClaudeQueryParams): Promise<
     cwd,
     env,
     includePartialMessages: params.includePartialMessages !== false,
-    settingSources: Array.isArray(params.settingSources) ? params.settingSources : ["user", "project", "local"],
+    settingSources: Array.isArray(params.settingSources)
+      ? params.settingSources
+      : params.isolateMcp === true
+        ? []
+        : ["user", "project", "local"],
   };
 
   if (pathToClaudeCodeExecutable) {
@@ -302,6 +306,7 @@ export async function startClaudeQuery(params: StartClaudeQueryParams): Promise<
   if (params.isolateMcp === true) {
     options.strictMcpConfig = true;
     settings.disableClaudeAiConnectors = true;
+    settings.disableAllHooks = true;
   }
 
   if ((options.thinking as { type?: string } | undefined)?.type !== "disabled") {

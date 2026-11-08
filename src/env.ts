@@ -10,5 +10,8 @@ export function buildClaudeCodeChildEnv(
   if (!env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH?.trim()) {
     env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH = String(MCP_DESCRIPTION_LIMIT);
   }
+  if (!env.MAX_MCP_OUTPUT_TOKENS?.trim()) {
+    env.MAX_MCP_OUTPUT_TOKENS = "200000";
+  }
   return env;
 }

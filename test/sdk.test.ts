@@ -1,6 +1,39 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { withGracefulStop } from "../src/sdk.ts";
+import { withGracefulStop, startClaudeQuery } from "../src/sdk.ts";
+
+describe("startClaudeQuery options", () => {
+  it("isolates settings and hooks when isolateMcp is set", async () => {
+    let captured: { options?: Record<string, unknown> } = {};
+    const handle = await startClaudeQuery({
+      prompt: "hi",
+      cwd: process.cwd(),
+      isolateMcp: true,
+      queryImpl: () => (input: { options: Record<string, unknown> }) => {
+        captured = input;
+        return (async function* () {})();
+      },
+    });
+    handle.close();
+    assert.deepEqual(captured.options?.settingSources, []);
+    assert.equal((captured.options?.settings as Record<string, unknown>)?.disableAllHooks, true);
+  });
+
+  it("leaves default settingSources untouched without isolateMcp", async () => {
+    let captured: { options?: Record<string, unknown> } = {};
+    const handle = await startClaudeQuery({
+      prompt: "hi",
+      cwd: process.cwd(),
+      queryImpl: () => (input: { options: Record<string, unknown> }) => {
+        captured = input;
+        return (async function* () {})();
+      },
+    });
+    handle.close();
+    assert.deepEqual(captured.options?.settingSources, ["user", "project", "local"]);
+    assert.equal((captured.options?.settings as Record<string, unknown> | undefined)?.disableAllHooks, undefined);
+  });
+});
 
 describe("withGracefulStop", () => {
   it("interrupt runs before close on stop", async () => {
