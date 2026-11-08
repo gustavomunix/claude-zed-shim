@@ -1,16 +1,49 @@
+import { mkdirSync } from "node:fs";
+import { resolve } from "node:path";
 import { fetchModelCatalog, startServer } from "./server.ts";
 import { checkSubscriptionAuth } from "./auth.ts";
 import { resolveClaudeCli } from "./cli-path.ts";
 import { getClaudeModels } from "./models.ts";
 
 export const DEFAULT_PORT = 8124;
+export const DEFAULT_PROVIDER_ID = "claude-code";
+const PROVIDER_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/;
+
+export type CliOptions = {
+  port: number;
+  configDir?: string;
+  providerId: string;
+};
+
+export function parseCliOptions(rest: string[]): CliOptions {
+  const portFlag = rest.indexOf("--port");
+  const portRaw = portFlag >= 0 ? rest[portFlag + 1] : undefined;
+  const port = portRaw ? Number.parseInt(portRaw, 10) : DEFAULT_PORT;
+  if (!Number.isFinite(port) || port <= 0) throw new Error("Invalid --port value");
+
+  const dirFlag = rest.indexOf("--config-dir");
+  const dirRaw = dirFlag >= 0 ? rest[dirFlag + 1] : undefined;
+
+  const idFlag = rest.indexOf("--provider-id");
+  const idRaw = idFlag >= 0 ? rest[idFlag + 1] : undefined;
+  const providerId = idFlag >= 0 ? (idRaw ?? "") : DEFAULT_PROVIDER_ID;
+  if (!PROVIDER_ID_PATTERN.test(providerId)) throw new Error("Invalid --provider-id value");
+
+  return { port, configDir: dirRaw ? resolve(dirRaw.trim()) : undefined, providerId };
+}
+
+function applyConfigDir(configDir: string | undefined): void {
+  if (!configDir) return;
+  mkdirSync(configDir, { recursive: true });
+  process.env.CLAUDE_CONFIG_DIR = configDir;
+}
 
 export function defaultMaxTokens(id: string, catalogMax?: number): number {
   if (catalogMax && catalogMax > 0) return catalogMax;
   return id.toLowerCase().includes("claude") ? 200_000 : 1_000_000;
 }
 
-async function printModelsSnippet(port: number): Promise<void> {
+async function printModelsSnippet(port: number, providerId: string = DEFAULT_PROVIDER_ID): Promise<void> {
   const models = await fetchModelCatalog();
   if (models.length === 0) {
     throw new Error("No Claude models found. Check `claude auth status` first.");
@@ -18,7 +51,7 @@ async function printModelsSnippet(port: number): Promise<void> {
   const snippet = {
     language_models: {
       openai_compatible: {
-        "claude-code": {
+        [providerId]: {
           api_url: `http://127.0.0.1:${port}/v1`,
           available_models: models.map((m) => ({
             name: m.id,
@@ -58,18 +91,15 @@ async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   switch (command) {
     case "serve": {
-      const portFlag = rest.indexOf("--port");
-      const portRaw = portFlag >= 0 ? rest[portFlag + 1] : undefined;
-      const port = portRaw ? Number.parseInt(portRaw, 10) : DEFAULT_PORT;
-      if (!Number.isFinite(port)) throw new Error("Invalid --port value");
-      startServer(port);
+      const options = parseCliOptions(rest);
+      applyConfigDir(options.configDir);
+      startServer(options.port);
       break;
     }
     case "models": {
-      const portFlag = rest.indexOf("--port");
-      const portRaw = portFlag >= 0 ? rest[portFlag + 1] : undefined;
-      const port = portRaw ? Number.parseInt(portRaw, 10) : DEFAULT_PORT;
-      await printModelsSnippet(port);
+      const options = parseCliOptions(rest);
+      applyConfigDir(options.configDir);
+      await printModelsSnippet(options.port, options.providerId);
       break;
     }
     case "status": {
