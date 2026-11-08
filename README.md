@@ -48,16 +48,53 @@ Zed requires a non-empty API key for `openai_compatible`: use any dummy value (a
 
 ### Windows background
 
-- `start-windows.cmd`: minimized console on port 8124 (builds first run).
-- `start-silent.vbs`: fully hidden; shortcut to `shell:startup` for boot.
-- `stop-windows.cmd`: kills process on port 8124.
+- `start-windows.cmd`: minimized console on port 8124 (builds first run). Reads `CLAUDE_ZED_SHIM_PORT` to override.
+- `start-silent.vbs`: fully hidden; shortcut to `shell:startup` for boot. Same port env.
+- `stop-windows.cmd`: kills process on port 8124. Reads `CLAUDE_ZED_SHIM_PORT` to match.
+
+## Two accounts (optional)
+
+Run two Claude accounts side by side. Second instance is entirely optional — a single-account setup needs nothing below.
+
+1. Login once with a separate config dir:
+
+```powershell
+set CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-account2
+claude auth login
+set CLAUDE_CONFIG_DIR=
+```
+
+2. Start a second shim instance on another port (same repo):
+
+```powershell
+set CLAUDE_CONFIG_DIR=%USERPROFILE%\.claude-account2
+node dist\cli.js serve --port 8125 --provider-id claude-code-2
+```
+
+Or via the runners (each runner picks up the env you set at launch):
+
+```powershell
+set CLAUDE_ZED_SHIM_PORT=8125
+start-windows.cmd
+```
+
+3. Print the Zed snippet for the second provider:
+
+```powershell
+node dist\cli.js models --port 8125 --provider-id claude-code-2
+```
+
+4. Merge into Zed `settings.json` under `language_models.openai_compatible` next to `claude-code`. For the Zed ACP path, duplicate `agent_servers.Claude` as e.g. `Claude (work)` and set `"env": { "CLAUDE_CONFIG_DIR": "%USERPROFILE%\\.claude-account2" }`.
+
+Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process; each instance owns its account.
 
 ## Env knobs
 
 | Variable | Default | What it does |
 | -------- | ------- | ------------ |
 | `CLAUDE_ZED_CWD` | `process.cwd()` | Working dir for Claude Code turns |
-| `CLAUDE_CONFIG_DIR` | unset | Alternate Claude account per project |
+| `CLAUDE_CONFIG_DIR` | unset | Alternate Claude account for this shim instance (CLI/login equivalent: `claude2`) |
+| `CLAUDE_ZED_SHIM_PORT` | 8124 | Port for the Windows runners (`start`/`stop`/`vbs`) |
 | `CLAUDE_ZED_PARKED_TURN_TTL_MS` | 3600000 | Parked-turn reap; `0` disables |
 | `CLAUDE_ZED_TURN_STALL_MS` | 600000 | Silent-turn kill watchdog |
 | `OPENCODE_CLAUDE_STRUCTURED_OUTPUT_REAP_MS` | 60000 | Structured-output park reap |
