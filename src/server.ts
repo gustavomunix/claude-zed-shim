@@ -642,7 +642,6 @@ async function startNewTurn(input: {
       }
     } finally {
       if (!handedOff) {
-        handle?.close();
         deleteBridge(bridgeId);
       }
     }
