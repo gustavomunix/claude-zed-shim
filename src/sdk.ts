@@ -58,6 +58,16 @@ export function resetClaudeAgentSdkCache(): void {
   sdkLoadError = null;
 }
 
+let sessionForker: typeof forkClaudeSession = forkClaudeSession;
+
+export function setClaudeSessionForker(forker: typeof forkClaudeSession | null): void {
+  sessionForker = forker ?? forkClaudeSession;
+}
+
+export function getClaudeSessionForker(): typeof forkClaudeSession {
+  return sessionForker;
+}
+
 export function killProcessTree(
   pid: number | null | undefined,
   options: { signal?: NodeJS.Signals; force?: boolean } = {},
@@ -431,6 +441,16 @@ export async function startClaudeQuery(params: StartClaudeQueryParams): Promise<
     close,
     getPid,
   });
+}
+
+let queryStarter: typeof startClaudeQuery = startClaudeQuery;
+
+export function setClaudeQueryStarter(starter: typeof startClaudeQuery | null): void {
+  queryStarter = starter ?? startClaudeQuery;
+}
+
+export function getClaudeQueryStarter(): typeof startClaudeQuery {
+  return queryStarter;
 }
 
 export async function listClaudeSupportedModels(timeoutMs = 20_000): Promise<unknown[] | null> {

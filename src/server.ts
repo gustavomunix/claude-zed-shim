@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { checkSubscriptionAuth } from "./auth.ts";
 import { buildClaudeCodeChildEnv } from "./env.ts";
 import { getClaudeModels, refreshModelsFromCli, resolveClaudeModelId } from "./models.ts";
@@ -15,7 +15,6 @@ import {
   classifyClaudeFailure,
   decodeToolMessageContent,
   failureStatusFor,
-  historyAfterUserCount,
   latestUserPrompt,
   openAICompletion,
   openAIError,
@@ -47,9 +46,22 @@ import {
   getSessionTurns,
   matchTurnHistory,
   recordTurnStart,
+  rewindSessionTurns,
   setForeignSessionId,
 } from "./store.ts";
-import { forkClaudeSession, startClaudeQuery, withGracefulStop, type StoppableClaudeQueryHandle } from "./sdk.ts";
+import { planResume, type SessionFileProbe } from "./resume.ts";
+import {
+  findClaudeSessionFile,
+  lastChainEntryUuid,
+  sessionChainAfterLeaf,
+  sessionFileHasEntry,
+} from "./session-transcript.ts";
+import {
+  getClaudeQueryStarter,
+  getClaudeSessionForker,
+  withGracefulStop,
+  type StoppableClaudeQueryHandle,
+} from "./sdk.ts";
 
 const MAX_BODY_BYTES = 128 * 1024 * 1024;
 const PARK_QUIET_MS = 3_000;
@@ -423,20 +435,59 @@ async function startNewTurn(input: {
     return;
   }
 
-  let resume = getForeignSessionId(key);
-  const turns = getSessionTurns(key);
-  let missedMessages: ZedMessage[] = [];
-  if (resume) {
-    const match = matchTurnHistory(turns, userHistoryFingerprints(priorMessages));
-    if (match.kind === "latest") {
-      missedMessages = historyAfterUserCount(priorMessages, match.count);
-    } else if (match.kind === "diverged") {
+  const prints = userHistoryFingerprints(messages);
+  const before = userHistoryFingerprints(priorMessages);
+  const sessionId = getForeignSessionId(key);
+  const probeFor = (id: string): SessionFileProbe | null => {
+    const file = findClaudeSessionFile(id, configDir);
+    if (!file) return null;
+    return {
+      exists: true,
+      hasEntry: (uuid) => sessionFileHasEntry(file, uuid),
+      chainAfterLeaf: (uuid) => sessionChainAfterLeaf(file, uuid),
+      lastEntry: () => lastChainEntryUuid(file),
+    };
+  };
+  const plan = planResume({
+    turns: getSessionTurns(key),
+    prints: before,
+    priorMessages,
+    sessionId,
+    leafUuid: getSessionLeafUuid(key),
+    probeFor,
+  });
+  let resume = plan.resume;
+  let missedMessages: ZedMessage[] = plan.missedMessages;
+  let transcriptMode = plan.transcript;
+  if (plan.clearBinding) clearForeignSessionId(key);
+  if (plan.rewindIndex !== undefined) rewindSessionTurns(key, plan.rewindIndex);
+  if (plan.forkAt) {
+    try {
+      const forked = await getClaudeSessionForker()(plan.forkAt.sessionId, plan.forkAt.leafUuid);
+      const forkedFile = findClaudeSessionFile(forked, configDir);
+      setForeignSessionId(key, forked, {
+        modelId: model,
+        cwd,
+        leafUuid: forkedFile ? lastChainEntryUuid(forkedFile) : undefined,
+      });
+      resume = forked;
+    } catch {
       clearForeignSessionId(key);
       resume = undefined;
+      missedMessages = priorMessages;
+      transcriptMode = "history";
     }
   }
+  if (prints.length > 0) {
+    recordTurnStart(key, { count: prints.length, hash: prints.at(-1)! }, before.length > 0 ? { count: before.length, hash: before.at(-1)! } : undefined);
+  }
 
-  const transcript = resume ? buildConversationTranscript(missedMessages) : buildConversationTranscript(priorMessages);
+  const transcript =
+    transcriptMode === "history"
+      ? buildConversationTranscript(priorMessages)
+      : transcriptMode === "missed"
+        ? buildConversationTranscript(missedMessages)
+        : "";
   const withContext = withConversationContext(prompt, transcript, Boolean(resume));
   const claudePrompt: string | SdkUserPrompt = typeof withContext === "string" ? withContext || " " : withContext;
 
@@ -462,7 +513,7 @@ async function startNewTurn(input: {
 
   try {
     handle = withGracefulStop(
-      await startClaudeQuery({
+      await getClaudeQueryStarter()({
         prompt: claudePrompt as string | AsyncIterable<unknown>,
         cwd,
         model,
@@ -758,7 +809,7 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
   res.end(openAICompletion(id, created, model, content, toolCalls, { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: total }));
 }
 
-export function startServer(port: number): void {
+export function startServer(port: number): Server {
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", "http://127.0.0.1");
     if (req.method === "GET" && url.pathname === "/health") {
@@ -783,6 +834,7 @@ export function startServer(port: number): void {
     console.log(`claude-zed-shim listening on http://127.0.0.1:${port}`);
     console.log(`Health: http://127.0.0.1:${port}/health`);
   });
+  return server;
 }
 
 process.on("SIGINT", () => {
