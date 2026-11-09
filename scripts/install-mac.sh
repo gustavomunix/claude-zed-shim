@@ -2,6 +2,16 @@
 set -eu
 
 port=${PORT:-8124}
+case "$port" in
+  ''|*[!0-9]*)
+    echo "PORT must be numeric" >&2
+    exit 1
+    ;;
+esac
+if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+  echo "PORT must be between 1 and 65535" >&2
+  exit 1
+fi
 config_dir=${CONFIG_DIR:-}
 provider_id=${PROVIDER_ID:-claude-code}
 label="dev.claude-zed-shim-$port"
@@ -9,7 +19,7 @@ old_label="dev.claude-zed-shim"
 root=$(cd "$(dirname "$0")/.." && pwd)
 plist="$HOME/Library/LaunchAgents/$label.plist"
 old_plist="$HOME/Library/LaunchAgents/$old_label.plist"
-log_dir="$HOME/Library/Logs/claude-zed-shim"
+log_dir="$HOME/Library/Logs/claude-zed-shim/$port"
 domain="gui/$(id -u)"
 
 xml_escape() {
