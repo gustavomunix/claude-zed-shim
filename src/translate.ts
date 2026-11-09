@@ -145,7 +145,7 @@ export function userMessagePrompt(content: unknown): string | AnthropicContentBl
   return blocks;
 }
 
-type HistoryMessage = { role?: string; content?: unknown; tool_calls?: Array<{ id?: string; type?: string; function?: { name?: string; arguments?: string } }>; tool_call_id?: string; name?: string };
+export type HistoryMessage = { role?: string; content?: unknown; tool_calls?: Array<{ id?: string; type?: string; function?: { name?: string; arguments?: string } }>; tool_call_id?: string; name?: string };
 
 function latestUserTurn(messages: HistoryMessage[]): number[] {
   const out: number[] = [];
