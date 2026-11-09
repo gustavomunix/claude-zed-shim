@@ -84,6 +84,22 @@ describe("usage protocol", () => {
     assert.equal(isNarrationSignature(undefined), false);
   });
 
+  it("maps max_tokens to length without streaming", async () => {
+    const testServer = await startTestServer();
+    try {
+      setClaudeQueryStarter(async () =>
+        mockHandle([
+          { type: "result", is_error: false, usage: { input_tokens: 10, output_tokens: 4 }, stop_reason: "max_tokens" },
+        ]),
+      );
+      const response = await post(testServer.port, false);
+      const body = (await response.json()) as { choices: Array<{ finish_reason: string }> };
+      assert.equal(body.choices[0]!.finish_reason, "length");
+    } finally {
+      await testServer.close();
+    }
+  });
+
   it("emits usage in a non-streaming response", async () => {
     const testServer = await startTestServer();
     try {

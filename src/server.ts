@@ -212,7 +212,7 @@ function mapSdkEvent(event: unknown, state: MapState): MappedEvent {
     return { kind: "park", tools: e.tools as ParkedToolCall[] };
   }
   if (e.type === "result") {
-    if (typeof e.stop_reason === "string") state.stopReason = e.stop_reason;
+    if (!e.parent_tool_use_id && typeof e.stop_reason === "string") state.stopReason = e.stop_reason;
     const usage = usageFromSdkResult(event);
     if (usage) return { kind: "usage", usage };
     if (e.is_error) {
@@ -729,6 +729,7 @@ async function relayStreamToResponse(
   const emit = (data: string): boolean => res.write(`data: ${data}\n\n`);
   emit(JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] }));
   let finishReason: string | null = "stop";
+  let finishLocked = false;
   const mapState: MapState = { messageId: null };
   const tracker = new TurnUsageTracker(bridge.reportedUsage);
   let resultUsage: OpenAIUsage | null = null;
@@ -745,6 +746,7 @@ async function relayStreamToResponse(
       const mapped = mapSdkEvent(event, mapState);
       if (mapped.kind === "park") {
         finishReason = "tool_calls";
+        finishLocked = true;
         mapped.tools.forEach((tool, i) => {
           emit(
             JSON.stringify({
@@ -772,10 +774,11 @@ async function relayStreamToResponse(
       }
       if (mapped.kind === "error") {
         emit(JSON.stringify({ error: { message: mapped.text, type: "claude_error" } }));
-        finishReason = "stop";
+        finishReason = finishReasonFor(mapState.stopReason);
+        finishLocked = true;
       }
     }
-    if (finishReason !== "tool_calls") finishReason = finishReasonFor(mapState.stopReason);
+    if (!finishLocked) finishReason = finishReasonFor(mapState.stopReason);
     const usage = resolveTurnUsage(tracker.total(), resultUsage);
     emit(
       JSON.stringify({
