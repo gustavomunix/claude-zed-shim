@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { describeZedTools, type ZedOpenAITool } from "../src/tool-bridge.ts";
+import { buildZedMcpServer, describeZedTools, type ZedOpenAITool } from "../src/tool-bridge.ts";
 
 const tool = (name: string): ZedOpenAITool => ({
   type: "function",
@@ -15,14 +15,32 @@ describe("describeZedTools", () => {
     assert.equal(listed.find((item) => item.name === "edit")?.annotations, undefined);
   });
 
-  it("keeps duplicate names with their own descriptions", () => {
+  it("builds both duplicate tools and serves the same list", async () => {
     const first = tool("read");
     const second = tool("read");
     second.function!.description = "second";
-    const listed = describeZedTools([first, second]);
-    assert.deepEqual(
-      listed.map((item) => item.description),
-      ["read", "second"],
-    );
+    second.function!.parameters = { type: "object", properties: { query: { type: "string" } } };
+    const calls: Array<{ name: string; description: string; schema: unknown }> = [];
+    let listHandler: (() => Promise<{ tools: unknown }>) | undefined;
+    const sdk = {
+      createSdkMcpServer: () => ({
+        instance: {
+          server: {
+            setRequestHandler: (_schema: unknown, handler: () => Promise<{ tools: unknown }>) => {
+              listHandler = handler;
+            },
+          },
+        },
+      }),
+      tool: (name: string, description: string, schema: unknown) => {
+        calls.push({ name, description, schema });
+        return { name };
+      },
+    };
+
+    await buildZedMcpServer([first, second], new Map(), () => {}, undefined, sdk);
+    assert.deepEqual(calls.map((call) => call.description), ["read", "second"]);
+    assert.notEqual(calls[0]!.schema, calls[1]!.schema);
+    assert.deepEqual(await listHandler!(), { tools: describeZedTools([first, second]) });
   });
 });

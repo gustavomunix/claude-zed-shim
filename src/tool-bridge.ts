@@ -136,9 +136,10 @@ export async function buildZedMcpServer(
   pendingTools: Map<string, ParkedToolCall>,
   onPark: () => void,
   ids?: { nextId?: () => string },
+  sdkOverride?: { createSdkMcpServer?: Function; tool?: Function },
 ): Promise<Record<string, unknown> | undefined> {
   try {
-    const sdk = await import("@anthropic-ai/claude-agent-sdk");
+    const sdk = sdkOverride ?? (await import("@anthropic-ai/claude-agent-sdk"));
     const { z } = await import("zod");
     const createSdkMcpServer = (sdk as { createSdkMcpServer?: Function }).createSdkMcpServer;
     const toolFactory = (sdk as { tool?: Function }).tool;
