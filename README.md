@@ -40,11 +40,13 @@ Zed requires a non-empty API key for `openai_compatible`: use any dummy value (a
 | Command           | What it does                              |
 | ----------------- | ----------------------------------------- |
 | `npm run serve`   | Build + start proxy on `127.0.0.1:8124`   |
-| `npm run models`  | Print `settings.json` snippet, live ids   |
+| `npm run models`  | Print Zed snippet, live ids                |
+| `npm run models -- --format opencode` | Print OpenCode v2 provider snippet |
 | `npm run status`  | CLI present? logged in? model count       |
 | `npm run self-test` | Offline checks (no network)             |
-| `npm test`        | Full suite (`node --test test/`)          |
+| `npm test`        | Full suite (`node --test "test/*.test.ts"`) |
 | `npm run typecheck` | `tsc --noEmit`                          |
+| `npm run verify`  | Typecheck + tests + build                 |
 
 ### Windows background
 
@@ -88,6 +90,34 @@ node dist\cli.js models --port 8125 --provider-id claude-code-2
 
 Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process; each instance owns its account. The provider id is free — name each instance whatever makes sense for you (`--provider-id claude-code-work`, `claude-code-personal`, …); it is only the key in Zed's `settings.json` / OpenCode's `opencode.json`.
 
+### OpenCode (v2)
+
+OpenCode's native Claude provider can keep account 1. Point the shim at account 2 and add its provider block:
+
+```sh
+node dist/cli.js models --port 8125 --provider-id claude-luciana --format opencode
+```
+
+Merge the printed `providers.claude-luciana` object into `~/.config/opencode/opencode.jsonc`. The shape is:
+
+```json
+{
+  "providers": {
+    "claude-luciana": {
+      "name": "Claude (Luciana)",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "http://127.0.0.1:8125/v1",
+        "apiKey": "dummy"
+      },
+      "models": {}
+    }
+  }
+}
+```
+
+`models` is filled by the command with the live catalog. The shim ignores the API key. Two shim instances also work: run a second process with another port/config dir and add a second `providers` entry.
+
 ## Installers
 
 Both installers install dependencies, build, and can self-register the shim:
@@ -98,7 +128,7 @@ Both installers install dependencies, build, and can self-register the shim:
 .\scripts\install.ps1 -Startup -Port 8125 -ConfigDir "$HOME\.claude-account2" -ProviderId claude-code-work
 ```
 
-- **macOS** — `scripts/install-mac.sh` (`PORT`, `CONFIG_DIR`, `PROVIDER_ID` env vars; launchd `LaunchAgent` with `KeepAlive`; `install-mac.sh uninstall` removes it).
+- **macOS** — `scripts/install-mac.sh` (`PORT`, `CONFIG_DIR`, `PROVIDER_ID` env vars; launchd `LaunchAgent` with `KeepAlive`). The label is `dev.claude-zed-shim-<port>`, so each account has its own job. Logs go to `~/Library/Logs/claude-zed-shim/<port>/`. `PORT=8125 sh scripts/install-mac.sh uninstall` removes only that instance; port 8124 also migrates the old label. `DRY_RUN=1` prints the plist without installing.
 
 ```sh
 PORT=8124 PROVIDER_ID=claude-code-personal sh scripts/install-mac.sh
@@ -126,3 +156,5 @@ For a second account, log it in first (see "Two accounts"), then install its ins
 | `tools: []` but Zed sent tools + 503 | SDK MCP bridge failed; retry; check debug log |
 | Parked turn never resumes | TTL reaps after 1h; Zed history replaced triggers supersede |
 | No models | `node dist/cli.js status`; CLI missing or signed out |
+
+Reference map and ported ranges: `docs/provenance.md`.
