@@ -115,20 +115,20 @@ export type ListedZedTool = {
   _meta: Record<string, unknown>;
 };
 
+function describeZedTool(tool: ZedOpenAITool): ListedZedTool | null {
+  const name = tool.function?.name;
+  if (!name) return null;
+  return {
+    name,
+    description: fitToolDescription(tool.function?.description || name),
+    inputSchema: normalizeToolParameters(tool.function?.parameters),
+    ...(PARALLEL_SAFE_TOOLS.has(name) ? { annotations: { readOnlyHint: true as const } } : {}),
+    _meta: { "anthropic/alwaysLoad": true },
+  };
+}
+
 export function describeZedTools(tools: ZedOpenAITool[]): ListedZedTool[] {
-  const listed: ListedZedTool[] = [];
-  for (const tool of tools) {
-    const name = tool.function?.name;
-    if (!name) continue;
-    listed.push({
-      name,
-      description: fitToolDescription(tool.function?.description || name),
-      inputSchema: normalizeToolParameters(tool.function?.parameters),
-      ...(PARALLEL_SAFE_TOOLS.has(name) ? { annotations: { readOnlyHint: true as const } } : {}),
-      _meta: { "anthropic/alwaysLoad": true },
-    });
-  }
-  return listed;
+  return tools.map(describeZedTool).filter((tool): tool is ListedZedTool => tool !== null);
 }
 
 export async function buildZedMcpServer(
@@ -150,10 +150,9 @@ export async function buildZedMcpServer(
     const listed = describeZedTools(tools);
     const mcpTools = tools
       .map((t) => {
-        const name = t.function?.name;
-        if (!name) return null;
-        const entry = listed.find((item) => item.name === name);
+        const entry = describeZedTool(t);
         if (!entry) return null;
+        const name = entry.name;
         const description = entry.description;
         const params = entry.inputSchema;
         let shape: unknown;

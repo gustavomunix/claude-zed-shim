@@ -14,4 +14,15 @@ describe("describeZedTools", () => {
     assert.equal(listed.find((item) => item.name === "webfetch")?.annotations?.readOnlyHint, true);
     assert.equal(listed.find((item) => item.name === "edit")?.annotations, undefined);
   });
+
+  it("keeps duplicate names with their own descriptions", () => {
+    const first = tool("read");
+    const second = tool("read");
+    second.function!.description = "second";
+    const listed = describeZedTools([first, second]);
+    assert.deepEqual(
+      listed.map((item) => item.description),
+      ["read", "second"],
+    );
+  });
 });
