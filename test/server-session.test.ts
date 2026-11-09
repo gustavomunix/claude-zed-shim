@@ -1,9 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockHandle, startTestServer } from "./helpers/server.ts";
-import { setClaudeQueryStarter, type StartClaudeQueryParams } from "../src/sdk.ts";
+import { conversationKey, getSessionTurns } from "../src/store.ts";
+import { userHistoryFingerprints } from "../src/translate.ts";
+import { setClaudeQueryStarter, setClaudeSessionForker, type StartClaudeQueryParams } from "../src/sdk.ts";
 
 const events = [
   {
@@ -62,6 +64,84 @@ describe("session resume", () => {
       assert.equal(third.status, 200);
       assert.equal(captured?.resume, undefined);
       assert.match(String(captured?.prompt), /User:\none/);
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("forks a branched rewind and transfers history when the fork fails", async () => {
+    const testServer = await startTestServer();
+    let captured: StartClaudeQueryParams | undefined;
+    try {
+      setClaudeQueryStarter(async (params) => {
+        captured = params;
+        return mockHandle(events);
+      });
+      await post(testServer.port, [{ role: "user", content: "one" }]);
+
+      const project = join(testServer.configDir, "projects", "demo");
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, "s1.jsonl");
+      writeFileSync(transcript, '{"type":"user","uuid":"u1"}\n');
+      await post(testServer.port, [
+        { role: "user", content: "one" },
+        { role: "assistant", content: "hi" },
+        { role: "user", content: "two" },
+      ]);
+      appendFileSync(transcript, '{"type":"assistant","uuid":"u2","parentUuid":"u1"}\n');
+
+      const rewind = [
+        { role: "user", content: "one" },
+        { role: "assistant", content: "hi" },
+        { role: "user", content: "edited" },
+      ];
+
+      writeFileSync(join(project, "forked.jsonl"), '{"type":"user","uuid":"f1"}\n');
+      setClaudeSessionForker(async () => "forked");
+      await post(testServer.port, rewind);
+      assert.equal(captured?.resume, "forked");
+
+      setClaudeSessionForker(async () => {
+        throw new Error("fork failed");
+      });
+      await post(testServer.port, rewind);
+      assert.equal(captured?.resume, undefined);
+      assert.match(String(captured?.prompt), /User:\none/);
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("rewinds in place when the chain is clean and ends at the leaf", async () => {
+    const testServer = await startTestServer();
+    let captured: StartClaudeQueryParams | undefined;
+    try {
+      setClaudeQueryStarter(async (params) => {
+        captured = params;
+        return mockHandle(events);
+      });
+      await post(testServer.port, [{ role: "user", content: "one" }]);
+
+      const project = join(testServer.configDir, "projects", "demo");
+      mkdirSync(project, { recursive: true });
+      const transcript = join(project, "s1.jsonl");
+      writeFileSync(transcript, '{"type":"user","uuid":"u1"}\n');
+      await post(testServer.port, [
+        { role: "user", content: "one" },
+        { role: "assistant", content: "hi" },
+        { role: "user", content: "two" },
+      ]);
+
+      const rewind = [
+        { role: "user", content: "one" },
+        { role: "assistant", content: "hi" },
+        { role: "user", content: "edited" },
+      ];
+      await post(testServer.port, rewind);
+      assert.equal(captured?.resume, "s1");
+      const hashes = getSessionTurns(conversationKey(rewind, "claude-opus-5-5")).map((turn) => turn.hash);
+      assert.equal(hashes.includes(userHistoryFingerprints([{ role: "user", content: "two" }])[0]!), false);
+      assert.equal(hashes.length, 2);
     } finally {
       await testServer.close();
     }

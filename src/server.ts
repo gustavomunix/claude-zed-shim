@@ -465,10 +465,11 @@ async function startNewTurn(input: {
     try {
       const forked = await getClaudeSessionForker()(plan.forkAt.sessionId, plan.forkAt.leafUuid);
       const forkedFile = findClaudeSessionFile(forked, configDir);
+      if (!forkedFile) throw new Error("Forked session transcript not found");
       setForeignSessionId(key, forked, {
         modelId: model,
         cwd,
-        leafUuid: forkedFile ? lastChainEntryUuid(forkedFile) : undefined,
+        leafUuid: lastChainEntryUuid(forkedFile),
       });
       resume = forked;
     } catch {
@@ -478,10 +479,6 @@ async function startNewTurn(input: {
       transcriptMode = "history";
     }
   }
-  if (prints.length > 0) {
-    recordTurnStart(key, { count: prints.length, hash: prints.at(-1)! }, before.length > 0 ? { count: before.length, hash: before.at(-1)! } : undefined);
-  }
-
   const transcript =
     transcriptMode === "history"
       ? buildConversationTranscript(priorMessages)
@@ -539,6 +536,9 @@ async function startNewTurn(input: {
     const kind = classifyClaudeFailure(message);
     sendError(res, (error as { statusCode?: number }).statusCode ?? failureStatusFor(kind), message);
     return;
+  }
+  if (prints.length > 0) {
+    recordTurnStart(key, { count: prints.length, hash: prints.at(-1)! }, before.length > 0 ? { count: before.length, hash: before.at(-1)! } : undefined);
   }
   bridge.handle = handle;
   handle.onEvent((event) => {

@@ -33,7 +33,10 @@ export async function startTestServer() {
   setAuthStatusProbe(async () => null);
 
   const server = startServer(0);
-  await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+  await new Promise<void>((resolve, reject) => {
+    server.once("listening", () => resolve());
+    server.once("error", reject);
+  });
   const port = (server.address() as AddressInfo).port;
 
   return {
