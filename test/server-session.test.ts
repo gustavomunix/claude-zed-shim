@@ -39,6 +39,7 @@ describe("session resume", () => {
       const first = await post(testServer.port, [{ role: "user", content: "one" }]);
       assert.equal(first.status, 200);
       assert.equal(captured?.resume, undefined);
+      assert.deepEqual(captured?.settingSources, ["project"]);
       assert.equal(
         findBridgeByConversation(conversationKey([{ role: "user", content: "one" }], "claude-opus-5-5")),
         undefined,

@@ -19,6 +19,23 @@ describe("startClaudeQuery options", () => {
     assert.equal((captured.options?.settings as Record<string, unknown>)?.disableAllHooks, true);
   });
 
+  it("lets explicit settingSources override isolateMcp", async () => {
+    let captured: { options?: Record<string, unknown> } = {};
+    const handle = await startClaudeQuery({
+      prompt: "hi",
+      cwd: process.cwd(),
+      isolateMcp: true,
+      settingSources: ["project"],
+      queryImpl: () => (input: { options: Record<string, unknown> }) => {
+        captured = input;
+        return (async function* () {})();
+      },
+    });
+    handle.close();
+    assert.deepEqual(captured.options?.settingSources, ["project"]);
+    assert.equal((captured.options?.settings as Record<string, unknown>)?.disableAllHooks, true);
+  });
+
   it("leaves default settingSources untouched without isolateMcp", async () => {
     let captured: { options?: Record<string, unknown> } = {};
     const handle = await startClaudeQuery({

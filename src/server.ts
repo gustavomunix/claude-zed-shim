@@ -523,6 +523,7 @@ async function startNewTurn(input: {
         mcpServers,
         autoCompactEnabled: true,
         isolateMcp: true,
+        settingSources: ["project"],
         tools: [],
         toolAliases,
         allowedTools: openCodeTools.length > 0 ? toolNames.map((n) => `mcp__zed__${n}`) : undefined,
