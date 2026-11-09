@@ -107,6 +107,30 @@ export function buildToolAliases(toolNames: string[]): Record<string, string> {
   return aliases;
 }
 
+export type ListedZedTool = {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  annotations?: { readOnlyHint: true };
+  _meta: Record<string, unknown>;
+};
+
+export function describeZedTools(tools: ZedOpenAITool[]): ListedZedTool[] {
+  const listed: ListedZedTool[] = [];
+  for (const tool of tools) {
+    const name = tool.function?.name;
+    if (!name) continue;
+    listed.push({
+      name,
+      description: fitToolDescription(tool.function?.description || name),
+      inputSchema: normalizeToolParameters(tool.function?.parameters),
+      ...(PARALLEL_SAFE_TOOLS.has(name) ? { annotations: { readOnlyHint: true as const } } : {}),
+      _meta: { "anthropic/alwaysLoad": true },
+    });
+  }
+  return listed;
+}
+
 export async function buildZedMcpServer(
   tools: ZedOpenAITool[],
   pendingTools: Map<string, ParkedToolCall>,
@@ -123,14 +147,15 @@ export async function buildZedMcpServer(
     }
     const nextId =
       ids?.nextId ?? (() => `call_${Math.random().toString(36).slice(2, 26).padEnd(24, "0")}`);
-    const listed: Array<{ name: string; description: string; inputSchema: Record<string, unknown>; _meta: Record<string, unknown> }> = [];
+    const listed = describeZedTools(tools);
     const mcpTools = tools
       .map((t) => {
         const name = t.function?.name;
         if (!name) return null;
-        const description = fitToolDescription(t.function?.description || name);
-        const params = normalizeToolParameters(t.function?.parameters);
-        listed.push({ name, description, inputSchema: params, _meta: { "anthropic/alwaysLoad": true } });
+        const entry = listed.find((item) => item.name === name);
+        if (!entry) return null;
+        const description = entry.description;
+        const params = entry.inputSchema;
         let shape: unknown;
         try {
           shape = (z as unknown as { fromJSONSchema: (s: unknown) => { loose: () => unknown } }).fromJSONSchema(params).loose();
