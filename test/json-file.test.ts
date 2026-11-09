@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { readJsonFile, writeJsonFileAtomic } from "../src/json-file.ts";
@@ -25,6 +25,20 @@ describe("json-file", () => {
       const bad = join(dir, "bad.json");
       writeFileSync(bad, "{ nope");
       assert.equal(readJsonFile(bad), null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects non-serializable values without leaving temp files", () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-json-"));
+    try {
+      const path = join(dir, "value.json");
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      assert.throws(() => writeJsonFileAtomic(path, circular), TypeError);
+      assert.throws(() => writeJsonFileAtomic(path, undefined), TypeError);
+      assert.deepEqual(readdirSync(dir).filter((name) => name.endsWith(".tmp")), []);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
