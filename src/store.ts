@@ -50,12 +50,19 @@ function storePath(): string {
 export { storePath };
 
 function readStore(): Record<string, ClaudeSessionBinding> {
-  const parsed = readJsonFile<Record<string, ClaudeSessionBinding>>(storePath());
-  return parsed && typeof parsed === "object" ? parsed : {};
+  try {
+    const parsed = readJsonFile<Record<string, ClaudeSessionBinding>>(storePath());
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function writeStore(store: Record<string, ClaudeSessionBinding>): void {
-  writeJsonFileAtomic(storePath(), store);
+  try {
+    writeJsonFileAtomic(storePath(), store);
+  } catch {
+  }
 }
 
 export function getForeignSessionId(conversationKeyValue: string): string | undefined {

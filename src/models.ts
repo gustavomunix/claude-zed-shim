@@ -142,12 +142,19 @@ export function invalidateModelsCache(): void {
 }
 
 function readCachedModels(): ClaudeModel[] | null {
-  const parsed = readJsonFile<ClaudeModel[]>(modelCachePath());
-  return Array.isArray(parsed) && parsed.length ? parsed : null;
+  try {
+    const parsed = readJsonFile<ClaudeModel[]>(modelCachePath());
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function writeCachedModels(models: ClaudeModel[]): void {
-  writeJsonFileAtomic(modelCachePath(), models);
+  try {
+    writeJsonFileAtomic(modelCachePath(), models);
+  } catch {
+  }
 }
 
 export function isFastModelId(modelId: string): boolean {

@@ -40,6 +40,27 @@ describe("modelCachePath", () => {
     }
   });
 
+  it("falls back when models.json is corrupt", () => {
+    const previousXdg = process.env.XDG_DATA_HOME;
+    const previousCfg = process.env.CLAUDE_CONFIG_DIR;
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-models-"));
+    try {
+      process.env.XDG_DATA_HOME = dir;
+      delete process.env.CLAUDE_CONFIG_DIR;
+      mkdirSync(join(modelCachePath(), ".."), { recursive: true });
+      writeFileSync(modelCachePath(), "{ broken");
+      invalidateModelsCache();
+      assert.ok(getClaudeModels().length > 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      if (previousXdg === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdg;
+      if (previousCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previousCfg;
+      invalidateModelsCache();
+    }
+  });
+
   it("writes the model cache with private permissions", () => {
     const previousXdg = process.env.XDG_DATA_HOME;
     const previousCfg = process.env.CLAUDE_CONFIG_DIR;
