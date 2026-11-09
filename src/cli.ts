@@ -4,6 +4,7 @@ import { fetchModelCatalog, startServer } from "./server.ts";
 import { checkSubscriptionAuth } from "./auth.ts";
 import { resolveClaudeCli } from "./cli-path.ts";
 import { defaultMaxTokens, getClaudeModels, invalidateModelsCache } from "./models.ts";
+import { configBucket } from "./store.ts";
 import { buildOpenCodeSnippet, buildZedSnippet, type SnippetFormat } from "./snippets.ts";
 
 export { defaultMaxTokens } from "./models.ts";
@@ -23,7 +24,7 @@ export function parseCliOptions(rest: string[]): CliOptions {
   const portFlag = rest.indexOf("--port");
   const portRaw = portFlag >= 0 ? rest[portFlag + 1] : undefined;
   const port = portRaw ? Number.parseInt(portRaw, 10) : DEFAULT_PORT;
-  if (!Number.isFinite(port) || port <= 0) throw new Error("Invalid --port value");
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) throw new Error("Invalid --port value");
 
   const dirFlag = rest.indexOf("--config-dir");
   const dirRaw = dirFlag >= 0 ? rest[dirFlag + 1] : undefined;
@@ -62,6 +63,8 @@ async function printModelsSnippet(
 }
 
 async function printStatus(): Promise<void> {
+  console.log(`Config dir: ${process.env.CLAUDE_CONFIG_DIR?.trim() || "(default)"}`);
+  console.log(`Store bucket: ${configBucket() || "(legacy)"}`);
   const binary = await resolveClaudeCli();
   if (!binary) {
     console.log("Claude CLI: NOT FOUND (npm install -g @anthropic-ai/claude-code)");
@@ -100,6 +103,8 @@ async function main(): Promise<void> {
       break;
     }
     case "status": {
+      const options = parseCliOptions(rest);
+      applyConfigDir(options.configDir);
       await printStatus();
       break;
     }

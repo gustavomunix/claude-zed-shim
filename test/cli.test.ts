@@ -23,6 +23,9 @@ describe("parseCliOptions", () => {
   it("throws on invalid port", () => {
     assert.throws(() => parseCliOptions(["--port", "abc"]), /port/);
     assert.throws(() => parseCliOptions(["--port", "0"]), /port/);
+    assert.throws(() => parseCliOptions(["--port", "65536"]), /port/);
+    assert.throws(() => parseCliOptions(["--port", "70000"]), /port/);
+    assert.equal(parseCliOptions(["--port", "65535"]).port, 65535);
   });
   it("defaults to zed format", () => {
     assert.equal(parseCliOptions([]).format, "zed");
