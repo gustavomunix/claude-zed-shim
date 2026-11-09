@@ -51,6 +51,7 @@ import {
   setForeignSessionId,
 } from "./store.ts";
 import { planResume, type SessionFileProbe } from "./resume.ts";
+import type { OpenAIUsage } from "./usage.ts";
 import {
   findClaudeSessionFile,
   lastChainEntryUuid,
@@ -183,16 +184,14 @@ type MappedEvent =
   | { kind: "text"; text: string }
   | { kind: "reasoning"; text: string }
   | { kind: "park"; tools: ParkedToolCall[] }
-  | { kind: "usage-delta"; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number }; messageId: string | null }
-  | { kind: "usage"; usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number } }
+  | { kind: "usage-delta"; usage: OpenAIUsage; messageId: string | null }
+  | { kind: "usage"; usage: OpenAIUsage }
   | { kind: "error"; text: string }
   | { kind: "ignore" };
 
 type MapState = { messageId: string | null; stopReason?: string; producedContent?: boolean; heldThinking?: { index: number; text: string; narration: boolean; first: boolean } };
 
-type UsageTotals = { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-
-function usageFromAssistantEvent(event: unknown): UsageTotals | null {
+function usageFromAssistantEvent(event: unknown): OpenAIUsage | null {
   const e = event as { message?: { usage?: unknown } };
   if (!e?.message || typeof e.message !== "object") return null;
   const u = (e.message as { usage?: unknown }).usage;
@@ -793,7 +792,7 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
     } else if (mapped.kind === "text") {
       content += mapped.text;
     } else if (mapped.kind === "usage" || mapped.kind === "usage-delta") {
-      const u: UsageTotals = mapped.usage;
+      const u: OpenAIUsage = mapped.usage;
       promptTokens += u.prompt_tokens;
       completionTokens += u.completion_tokens;
     } else if (mapped.kind === "error") {

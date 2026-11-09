@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { OpenAIUsage } from "./usage.ts";
 
 export type AnthropicContentBlock =
   | { type: "text"; text: string }
@@ -436,11 +437,7 @@ export function failureStatusFor(kind: ClaudeFailureKind): number {
   }
 }
 
-export function usageFromSdkResult(event: unknown): {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-} | null {
+export function usageFromSdkResult(event: unknown): OpenAIUsage | null {
   const e = event as { usage?: unknown };
   if (!e?.usage || typeof e.usage !== "object") return null;
   return usageFromAnthropic(e.usage as Record<string, unknown>);
@@ -450,15 +447,22 @@ export function asNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
-export function usageFromAnthropic(usage: Record<string, unknown>): {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-} {
+export function usageFromAnthropic(usage: Record<string, unknown>): OpenAIUsage {
   const input = asNumber(usage.input_tokens);
   const completion = asNumber(usage.output_tokens);
   const cached = asNumber(usage.cache_read_input_tokens);
   const cacheWrite = asNumber(usage.cache_creation_input_tokens);
+  const outputDetails = usage.output_tokens_details as Record<string, unknown> | undefined;
+  const thinking = asNumber(outputDetails?.thinking_tokens);
+  const promptDetails: NonNullable<OpenAIUsage["prompt_tokens_details"]> = {};
+  if (cached > 0) promptDetails.cached_tokens = cached;
+  if (cacheWrite > 0) promptDetails.cache_write_tokens = cacheWrite;
   const prompt = input + cached + cacheWrite;
-  return { prompt_tokens: prompt, completion_tokens: completion, total_tokens: prompt + completion };
+  return {
+    prompt_tokens: prompt,
+    completion_tokens: completion,
+    total_tokens: prompt + completion,
+    ...(Object.keys(promptDetails).length > 0 ? { prompt_tokens_details: promptDetails } : {}),
+    ...(thinking > 0 ? { completion_tokens_details: { reasoning_tokens: thinking } } : {}),
+  };
 }
