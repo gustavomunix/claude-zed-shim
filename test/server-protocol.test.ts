@@ -100,6 +100,19 @@ describe("usage protocol", () => {
     }
   });
 
+  it("surfaces a result error instead of treating it as usage", async () => {
+    const testServer = await startTestServer();
+    try {
+      setClaudeQueryStarter(async () =>
+        mockHandle([{ type: "result", is_error: true, error: "boom", usage: { input_tokens: 1, output_tokens: 1 } }]),
+      );
+      const response = await post(testServer.port, false);
+      assert.equal(response.status, 500);
+    } finally {
+      await testServer.close();
+    }
+  });
+
   it("emits usage in a non-streaming response", async () => {
     const testServer = await startTestServer();
     try {

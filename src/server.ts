@@ -213,12 +213,12 @@ function mapSdkEvent(event: unknown, state: MapState): MappedEvent {
   }
   if (e.type === "result") {
     if (!e.parent_tool_use_id && typeof e.stop_reason === "string") state.stopReason = e.stop_reason;
-    const usage = usageFromSdkResult(event);
-    if (usage) return { kind: "usage", usage };
     if (e.is_error) {
       const text = typeof e.error === "string" ? e.error : "Claude turn failed";
       return { kind: "error", text };
     }
+    const usage = usageFromSdkResult(event);
+    if (usage) return { kind: "usage", usage };
     return { kind: "ignore" };
   }
   if (e.type === "stream_event" && e.event && typeof e.event === "object") {
