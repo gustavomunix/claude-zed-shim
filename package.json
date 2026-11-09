@@ -20,7 +20,7 @@
     "preself-test": "npm run build",
     "self-test": "node dist/cli.js self-test",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/",
+    "test": "node --test \"test/*.test.ts\"",
     "verify": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
