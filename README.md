@@ -146,6 +146,7 @@ For a second account, log it in first (see "Two accounts"), then install its ins
 | `CLAUDE_ZED_SHIM_PORT` | 8124 | Port for the Windows runners (`start`/`stop`/`vbs`) |
 | `CLAUDE_ZED_PARKED_TURN_TTL_MS` | 3600000 | Parked-turn reap; `0` disables |
 | `CLAUDE_ZED_TURN_STALL_MS` | 600000 | Silent-turn kill watchdog |
+| `CLAUDE_ZED_DEBUG` | unset | `1` writes JSON debug lines to stderr |
 | `OPENCODE_CLAUDE_STRUCTURED_OUTPUT_REAP_MS` | 60000 | Structured-output park reap |
 
 ## Troubleshooting
@@ -157,4 +158,4 @@ For a second account, log it in first (see "Two accounts"), then install its ins
 | Parked turn never resumes | TTL reaps after 1h; Zed history replaced triggers supersede |
 | No models | `node dist/cli.js status`; CLI missing or signed out |
 
-Reference map and ported ranges: `docs/provenance.md`.
+Reference map and ported ranges: `docs/provenance.md`. Two-account checks: `docs/verification.md`.

@@ -1,6 +1,6 @@
 {
   "name": "claude-zed-shim",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Local OpenAI-compatible proxy exposing Claude Code subscription (Agent SDK) as a provider in Zed Agent",
   "type": "module",
   "license": "MIT",
