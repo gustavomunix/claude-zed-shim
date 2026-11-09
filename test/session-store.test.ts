@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
   getSessionLeafUuid,
   getSessionTurns,
@@ -10,6 +10,7 @@ import {
   recordTurnStart,
   rewindSessionTurns,
   setForeignSessionId,
+  storePath,
   type TurnBoundary,
 } from "../src/store.ts";
 
@@ -85,10 +86,18 @@ describe("session boundaries", () => {
 
   it("stamps old boundaries when the session changes", () => {
     withTempData(() => {
-      setForeignSessionId("k4", "s1", { leafUuid: "leaf-a" });
-      recordTurnStart("k4", { count: 1, hash: "a" });
-      setForeignSessionId("k4", "s1", { leafUuid: "leaf-b" });
-      recordTurnStart("k4", { count: 2, hash: "b" });
+      mkdirSync(dirname(storePath()), { recursive: true });
+      writeFileSync(
+        storePath(),
+        JSON.stringify({
+          k4: {
+            conversationKey: "k4",
+            foreignSessionId: "s1",
+            turns: [{ count: 1, hash: "a" }, { count: 2, hash: "b" }],
+            updatedAt: 1,
+          },
+        }),
+      );
       setForeignSessionId("k4", "s2", { leafUuid: "leaf-c" });
       assert.equal(getSessionTurns("k4")[0]?.sessionId, "s1");
     });
