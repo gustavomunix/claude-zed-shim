@@ -1,12 +1,13 @@
 import { withGracefulStop, type StoppableClaudeQueryHandle } from "./sdk.ts";
 import type { ParkedToolCall } from "./tool-bridge.ts";
+import type { OpenAIUsage } from "./usage.ts";
 
 export type ParkedBridge = {
   id: string;
   conversationKey: string;
   handle: StoppableClaudeQueryHandle;
   pendingTools: Map<string, ParkedToolCall>;
-  reportedUsage: Map<string, unknown>;
+  reportedUsage: Map<string, OpenAIUsage>;
   forwardedSteering: Set<string>;
   createdAt: number;
   input?: { end: () => void };
