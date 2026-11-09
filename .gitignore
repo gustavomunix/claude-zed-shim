@@ -1,6 +1,5 @@
 node_modules/
 dist/
-package-lock.json
 progress.md
 serve-*.generated.cmd
 serve-*.generated.vbs

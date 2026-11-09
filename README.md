@@ -11,7 +11,7 @@ How it works:
 
 ## Prerequisites
 
-- Node.js >= 20, Windows/macOS/Linux.
+- Node.js >= 22.18, Windows/macOS/Linux.
 - Claude Code CLI installed and logged in: `claude auth login --claudeai`. Check with `node dist/cli.js status`.
 
 ## Setup
