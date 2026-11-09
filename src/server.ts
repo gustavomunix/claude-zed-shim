@@ -700,7 +700,9 @@ async function startNewTurn(input: {
     const probe = await probeTurn(consumeStream());
     if (probe.status === "failed") {
       const kind = classifyClaudeFailure(probe.errorText);
-      sendError(res, failureStatusFor(kind), probe.errorText);
+      const status = failureStatusFor(kind);
+      debugLog("error", { kind, status, phase: "probe" });
+      sendError(res, status, probe.errorText);
       return;
     }
     await streamTurnResponse(probe.replay, requestedModel, bridge, res);
@@ -867,7 +869,9 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
   }
   if (errorText && toolCalls.length === 0 && !content) {
     const kind = classifyClaudeFailure(errorText);
-    sendError(res, failureStatusFor(kind), errorText);
+    const status = failureStatusFor(kind);
+    debugLog("error", { kind, status, phase: "collect" });
+    sendError(res, status, errorText);
     return;
   }
   const usage = resolveTurnUsage(tracker.total(), resultUsage) ?? {

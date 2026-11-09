@@ -43,4 +43,21 @@ describe("debugLog", () => {
       else process.env.CLAUDE_ZED_DEBUG = previous;
     }
   });
+
+  it("redacts nested keys and never throws", () => {
+    const previous = process.env.CLAUDE_ZED_DEBUG;
+    process.env.CLAUDE_ZED_DEBUG = "1";
+    try {
+      const writes = capture(() => {
+        debugLog("test", { headers: { Authorization: "Bearer x" }, list: [{ api_key: "y" }] });
+        debugLog("bad", { value: 1n });
+      });
+      const line = JSON.parse(writes[0]!) as { headers: Record<string, string>; list: Array<Record<string, string>> };
+      assert.equal(line.headers.Authorization, "[redacted]");
+      assert.equal(line.list[0]!.api_key, "[redacted]");
+    } finally {
+      if (previous === undefined) delete process.env.CLAUDE_ZED_DEBUG;
+      else process.env.CLAUDE_ZED_DEBUG = previous;
+    }
+  });
 });
