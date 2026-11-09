@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mockHandle, startTestServer } from "./helpers/server.ts";
+import { isNarrationSignature } from "../src/server.ts";
 import { setClaudeQueryStarter } from "../src/sdk.ts";
 
 const streamEvents = [
@@ -51,6 +52,36 @@ describe("usage protocol", () => {
     } finally {
       await testServer.close();
     }
+  });
+
+  it("maps max_tokens to length in streaming", async () => {
+    const testServer = await startTestServer();
+    try {
+      const events = [
+        streamEvents[0]!,
+        streamEvents[1]!,
+        {
+          type: "stream_event",
+          event: { type: "message_delta", delta: { stop_reason: "max_tokens" }, usage: { output_tokens: 4 } },
+        },
+        { type: "result", is_error: false, usage: { input_tokens: 10, output_tokens: 4 }, stop_reason: "max_tokens" },
+      ];
+      setClaudeQueryStarter(async () => mockHandle(events));
+      const response = await post(testServer.port, true);
+      const chunks = (await response.text())
+        .split("\n")
+        .filter((line) => line.startsWith("data: {"))
+        .map((line) => JSON.parse(line.slice(6)));
+      assert.equal(chunks.at(-1)!.choices[0].finish_reason, "length");
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("recognizes narration signatures", () => {
+    assert.equal(isNarrationSignature(Buffer.from("narration:hello").toString("base64")), true);
+    assert.equal(isNarrationSignature(Buffer.from("thinking").toString("base64")), false);
+    assert.equal(isNarrationSignature(undefined), false);
   });
 
   it("emits usage in a non-streaming response", async () => {

@@ -15,6 +15,7 @@ import {
   classifyClaudeFailure,
   decodeToolMessageContent,
   failureStatusFor,
+  finishReasonFor,
   latestUserPrompt,
   openAICompletion,
   openAIError,
@@ -199,8 +200,8 @@ function usageFromAssistantEvent(event: unknown): OpenAIUsage | null {
   return usageFromAnthropic(u as Record<string, unknown>);
 }
 
-function isNarrationSignature(_sig: unknown): boolean {
-  return false;
+export function isNarrationSignature(signature: unknown): boolean {
+  return typeof signature === "string" && Buffer.from(signature, "base64").subarray(0, 64).includes("narration");
 }
 
 function mapSdkEvent(event: unknown, state: MapState): MappedEvent {
@@ -211,6 +212,7 @@ function mapSdkEvent(event: unknown, state: MapState): MappedEvent {
     return { kind: "park", tools: e.tools as ParkedToolCall[] };
   }
   if (e.type === "result") {
+    if (typeof e.stop_reason === "string") state.stopReason = e.stop_reason;
     const usage = usageFromSdkResult(event);
     if (usage) return { kind: "usage", usage };
     if (e.is_error) {
@@ -229,6 +231,8 @@ function mapSdkEvent(event: unknown, state: MapState): MappedEvent {
       return usage ? { kind: "usage-delta", usage, messageId: id } : { kind: "ignore" };
     }
     if (ev.type === "message_delta") {
+      const stopReason = (ev.delta as { stop_reason?: unknown } | undefined)?.stop_reason;
+      if (typeof stopReason === "string" && !e.parent_tool_use_id) state.stopReason = stopReason;
       const usage = ev.usage && typeof ev.usage === "object" ? usageFromAnthropic(ev.usage as Record<string, unknown>) : null;
       return usage ? { kind: "usage-delta", usage, messageId: state.messageId } : { kind: "ignore" };
     }
@@ -771,6 +775,7 @@ async function relayStreamToResponse(
         finishReason = "stop";
       }
     }
+    if (finishReason !== "tool_calls") finishReason = finishReasonFor(mapState.stopReason);
     const usage = resolveTurnUsage(tracker.total(), resultUsage);
     emit(
       JSON.stringify({
@@ -828,7 +833,7 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
     total_tokens: 0,
   };
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(openAICompletion(id, created, model, content, toolCalls, usage));
+  res.end(openAICompletion(id, created, model, content, toolCalls, usage, mapState.stopReason));
 }
 
 export function startServer(port: number): Server {

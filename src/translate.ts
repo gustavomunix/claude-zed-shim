@@ -359,6 +359,12 @@ export function openAIStreamChunk(
   });
 }
 
+export function finishReasonFor(stopReason: string | null | undefined): "stop" | "length" | "content_filter" {
+  if (stopReason === "max_tokens") return "length";
+  if (stopReason === "refusal") return "content_filter";
+  return "stop";
+}
+
 export function openAICompletion(
   id: string,
   created: number,
@@ -366,6 +372,7 @@ export function openAICompletion(
   content: string,
   toolCalls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>,
   usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+  stopReason?: string | null,
 ): string {
   return JSON.stringify({
     id,
@@ -380,7 +387,7 @@ export function openAICompletion(
           content: content || null,
           ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
         },
-        finish_reason: toolCalls.length > 0 ? "tool_calls" : "stop",
+        finish_reason: toolCalls.length > 0 ? "tool_calls" : finishReasonFor(stopReason),
       },
     ],
     usage,

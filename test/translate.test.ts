@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildConversationTranscript, extractTextContent, latestUserPrompt } from "../src/translate.ts";
+import { buildConversationTranscript, extractTextContent, finishReasonFor, latestUserPrompt } from "../src/translate.ts";
 
 describe("transcript", () => {
   it("orders system+user+assistant tool+tool result", () => {
@@ -25,6 +25,12 @@ describe("transcript", () => {
     assert.equal(extractTextContent([{ type: "text", text: "yo" }]), "yo");
     const p = latestUserPrompt([{ role: "user", content: "do x" }]);
     assert.equal(typeof p === "string" ? p : p.message.content, "do x");
+  });
+  it("maps claude stop reasons", () => {
+    assert.equal(finishReasonFor("max_tokens"), "length");
+    assert.equal(finishReasonFor("refusal"), "content_filter");
+    assert.equal(finishReasonFor("end_turn"), "stop");
+    assert.equal(finishReasonFor(undefined), "stop");
   });
   it("keeps data-url image blocks", () => {
     const p = latestUserPrompt([
