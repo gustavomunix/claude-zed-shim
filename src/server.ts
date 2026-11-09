@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { checkSubscriptionAuth } from "./auth.ts";
 import { buildClaudeCodeChildEnv } from "./env.ts";
+import { debugLog } from "./log.ts";
 import { getClaudeModels, refreshModelsFromCli, resolveClaudeModelId } from "./models.ts";
 import {
   buildZedMcpServer,
@@ -326,6 +327,13 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
   const key = metaKind ? `meta:${randomUUID()}` : conversationKey(messages, model);
   const configDir = process.env.CLAUDE_CONFIG_DIR || undefined;
 
+  debugLog("request", {
+    model,
+    stream,
+    messages: messages.length,
+    tools: body.tools.length,
+    meta: metaKind,
+  });
   const toolResults = metaKind ? new Map<string, McpToolResultContent[]>() : collectToolResults(messages);
 
   // Resume parked bridge
@@ -434,6 +442,7 @@ async function startNewTurn(input: {
 
   const notifyPark = () => {
     parked = true;
+    debugLog("park", { pending: pendingTools.size });
     const waiters = parkWaiters;
     parkWaiters = [];
     for (const resolve of waiters) resolve();
@@ -472,6 +481,12 @@ async function startNewTurn(input: {
       probeFor,
     });
     resume = plan.resume;
+    debugLog("resume", {
+      reason: plan.reason,
+      resume: Boolean(plan.resume),
+      fork: Boolean(plan.forkAt),
+      rewind: plan.rewindIndex,
+    });
     let missedMessages: ZedMessage[] = plan.missedMessages;
     let transcriptMode = plan.transcript;
     if (plan.clearBinding) clearForeignSessionId(key);
@@ -558,7 +573,9 @@ async function startNewTurn(input: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const kind = classifyClaudeFailure(message);
-    sendError(res, (error as { statusCode?: number }).statusCode ?? failureStatusFor(kind), message);
+    const status = (error as { statusCode?: number }).statusCode ?? failureStatusFor(kind);
+    debugLog("error", { kind, status });
+    sendError(res, status, message);
     return;
   }
   if (!isMeta && prints.length > 0) {
@@ -802,6 +819,7 @@ async function relayStreamToResponse(
     }
     if (!finishLocked) finishReason = finishReasonFor(mapState.stopReason);
     const usage = resolveTurnUsage(tracker.total(), resultUsage);
+    if (usage) debugLog("usage", { ...usage });
     emit(
       JSON.stringify({
         id,
@@ -857,6 +875,7 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
     completion_tokens: 0,
     total_tokens: 0,
   };
+  debugLog("usage", { ...usage });
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(openAICompletion(id, created, model, content, toolCalls, usage, mapState.stopReason));
 }
