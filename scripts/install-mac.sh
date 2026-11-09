@@ -8,7 +8,9 @@ case "$port" in
     exit 1
     ;;
 esac
-if [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+port=$(printf '%s' "$port" | sed 's/^0*//')
+[ -n "$port" ] || port=0
+if [ "${#port}" -gt 5 ] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
   echo "PORT must be between 1 and 65535" >&2
   exit 1
 fi
