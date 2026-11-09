@@ -1,10 +1,27 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { buildZedMcpServer, describeZedTools, type ZedOpenAITool } from "../src/tool-bridge.ts";
+import { z } from "zod";
+import {
+  buildZedMcpServer,
+  describeZedTools,
+  withStringCoercion,
+  type ZedOpenAITool,
+} from "../src/tool-bridge.ts";
 
 const tool = (name: string): ZedOpenAITool => ({
   type: "function",
   function: { name, description: name, parameters: { type: "object", properties: {} } },
+});
+
+describe("withStringCoercion", () => {
+  it("coerces string arguments before validation", () => {
+    const schema = { type: "object", properties: { count: { type: "number" } } };
+    const shape = (
+      z.fromJSONSchema(schema as never) as unknown as { loose: () => { parse: (value: unknown) => unknown } }
+    ).loose();
+    const coerced = withStringCoercion(shape, schema) as { parse: (value: unknown) => unknown };
+    assert.deepEqual(coerced.parse({ count: "5" }), { count: 5 });
+  });
 });
 
 describe("describeZedTools", () => {

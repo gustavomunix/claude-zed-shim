@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type ParkedToolCall = {
   id: string;
   name: string;
@@ -90,6 +92,34 @@ export function coerceStringArgument(value: unknown, schema: unknown): unknown {
   return value;
 }
 
+export function withStringCoercion(shape: unknown, schema: Record<string, unknown>): unknown {
+  const props =
+    schema.properties && typeof schema.properties === "object"
+      ? (schema.properties as Record<string, unknown>)
+      : {};
+  const object =
+    shape instanceof z.ZodObject
+      ? (shape as unknown as { shape: Record<string, z.ZodTypeAny>; extend: (fields: Record<string, z.ZodTypeAny>) => unknown })
+      : undefined;
+  const fields: Record<string, z.ZodTypeAny> = {
+    ...(object ? object.shape : (shape as Record<string, z.ZodTypeAny>)),
+  };
+  let changed = false;
+  for (const [key, field] of Object.entries(fields)) {
+    const types = schemaTypes(props[key]);
+    if (types.length === 0 || types.includes("string")) continue;
+    const coerced = z.preprocess((value) => coerceStringArgument(value, props[key]), field);
+    const omitted = field.safeParse(undefined);
+    fields[key] =
+      omitted.success && omitted.data !== undefined
+        ? coerced.default(() => field.parse(undefined))
+        : coerced;
+    changed = true;
+  }
+  if (!changed) return shape;
+  return object ? object.extend(fields) : fields;
+}
+
 export function buildToolAliases(toolNames: string[]): Record<string, string> {
   const aliases: Record<string, string> = {};
   for (const name of toolNames) {
@@ -140,7 +170,6 @@ export async function buildZedMcpServer(
 ): Promise<Record<string, unknown> | undefined> {
   try {
     const sdk = sdkOverride ?? (await import("@anthropic-ai/claude-agent-sdk"));
-    const { z } = await import("zod");
     const createSdkMcpServer = (sdk as { createSdkMcpServer?: Function }).createSdkMcpServer;
     const toolFactory = (sdk as { tool?: Function }).tool;
     if (typeof createSdkMcpServer !== "function" || typeof toolFactory !== "function") {
@@ -162,6 +191,7 @@ export async function buildZedMcpServer(
         } catch {
           shape = z.object({}).catchall(z.any());
         }
+        shape = withStringCoercion(shape, params);
         return toolFactory(
           name,
           description,
