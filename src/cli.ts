@@ -108,7 +108,9 @@ async function main(): Promise<void> {
       break;
     }
     default: {
-      console.log("Usage: cli.ts <serve [--port N] | models [--port N] | status | self-test>");
+      console.log(
+        "Usage: cli.ts <serve [--port N] [--provider-id ID] | models [--port N] [--provider-id ID] [--format zed|opencode] | status | self-test>",
+      );
       process.exitCode = 1;
     }
   }

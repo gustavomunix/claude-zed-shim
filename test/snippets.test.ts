@@ -37,4 +37,18 @@ describe("buildOpenCodeSnippet", () => {
     assert.equal(provider.models["claude-opus-5-5-fast"]!.modelID, "claude-opus-5-5:fast");
     assert.deepEqual(provider.models["claude-opus-5-5"]!.limit, { context: 1_000_000, output: 128_000 });
   });
+
+  it("keeps every model when keys collide and clamps output to context", () => {
+    const snippet = buildOpenCodeSnippet(
+      [
+        { id: "a:b", displayName: "A", contextWindow: 10, maxTokens: 100 },
+        { id: "a-b", displayName: "B", contextWindow: 10, maxTokens: 1 },
+      ],
+      8124,
+      "p",
+    ) as { providers: Record<string, { models: Record<string, { modelID: string; limit: { context: number; output: number } }> }> };
+    const models = snippet.providers.p!.models;
+    assert.equal(Object.keys(models).length, 2);
+    assert.equal(Object.values(models)[0]!.limit.output, 10);
+  });
 });

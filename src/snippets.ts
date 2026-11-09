@@ -7,10 +7,23 @@ const OPENCODE_PACKAGE = "@opencode/ai/providers/openai-compatible";
 const DEFAULT_OUTPUT_TOKENS = 64_000;
 
 function openCodeModelKey(id: string): string {
-  return id
+  const key = id
     .replace(/:fast$/, "-fast")
     .replace(/\[1m\]/g, "-1m")
     .replace(/[^a-zA-Z0-9_.-]/g, "-");
+  return /^[a-zA-Z0-9]/.test(key) ? key : `model-${key.replace(/^[^a-zA-Z0-9]+/, "")}`;
+}
+
+function uniqueModelKey(id: string, used: Set<string>): string {
+  const base = openCodeModelKey(id);
+  let key = base;
+  let suffix = 2;
+  while (used.has(key)) {
+    key = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  used.add(key);
+  return key;
 }
 
 function outputTokens(model: ModelInfo): number {
@@ -36,23 +49,27 @@ export function buildZedSnippet(models: ModelInfo[], port: number, providerId: s
 }
 
 export function buildOpenCodeSnippet(models: ModelInfo[], port: number, providerId: string): unknown {
+  const used = new Set<string>();
   const providerModels = Object.fromEntries(
-    models.map((model) => [
-      openCodeModelKey(model.id),
-      {
-        modelID: model.id,
-        name: model.displayName ?? model.id,
-        limit: {
-          context: model.contextWindow ?? defaultMaxTokens(model.id),
-          output: outputTokens(model),
+    models.map((model) => {
+      const context = model.contextWindow ?? defaultMaxTokens(model.id);
+      return [
+        uniqueModelKey(model.id, used),
+        {
+          modelID: model.id,
+          name: model.displayName ?? model.id,
+          limit: {
+            context,
+            output: Math.min(outputTokens(model), context),
+          },
+          capabilities: {
+            tools: true,
+            temperature: true,
+            input: ["text", "image"],
+          },
         },
-        capabilities: {
-          tools: true,
-          temperature: true,
-          input: ["text", "image"],
-        },
-      },
-    ]),
+      ];
+    }),
   );
 
   return {
