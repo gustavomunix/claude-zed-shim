@@ -21,7 +21,7 @@ const streamEvents = [
     is_error: false,
     session_id: "s1",
     uuid: "u1",
-    usage: { input_tokens: 10, output_tokens: 4 },
+    usage: { input_tokens: 1, output_tokens: 1 },
     stop_reason: "end_turn",
   },
 ];
