@@ -52,6 +52,12 @@ import {
   setForeignSessionId,
 } from "./store.ts";
 import { planResume, type SessionFileProbe } from "./resume.ts";
+import {
+  buildMetaPrompt,
+  detectMetaRequestKind,
+  UTILITY_SYSTEM_PROMPT,
+  type MetaRequestKind,
+} from "./request-kind.ts";
 import { TurnUsageTracker, resolveTurnUsage, type OpenAIUsage } from "./usage.ts";
 import {
   findClaudeSessionFile,
@@ -316,14 +322,15 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
   const requestedModel = body.model;
   const model = resolveClaudeModelId(requestedModel.replace(/^claude-code\//, ""));
   const stream = body.stream;
-  const key = conversationKey(messages, model);
+  const metaKind = detectMetaRequestKind(messages);
+  const key = metaKind ? `meta:${randomUUID()}` : conversationKey(messages, model);
   const configDir = process.env.CLAUDE_CONFIG_DIR || undefined;
 
-  const toolResults = collectToolResults(messages);
+  const toolResults = metaKind ? new Map<string, McpToolResultContent[]>() : collectToolResults(messages);
 
   // Resume parked bridge
-  let existing = findBridgeByConversation(key);
-  if ((!existing || existing.pendingTools.size === 0) && toolResults.size > 0) {
+  let existing = metaKind ? undefined : findBridgeByConversation(key);
+  if (!metaKind && (!existing || existing.pendingTools.size === 0) && toolResults.size > 0) {
     for (const toolCallId of toolResults.keys()) {
       const byTool = findBridgeByPendingTool(toolCallId);
       if (byTool) {
@@ -373,7 +380,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
 
   const releaseSpawnLock = await acquireSpawnLock(key);
   try {
-    await startNewTurn({ body, messages, key, model, requestedModel, stream, toolResults, configDir, res });
+    await startNewTurn({ body, messages, key, model, requestedModel, stream, toolResults, configDir, metaKind, res });
   } finally {
     releaseSpawnLock();
   }
@@ -388,9 +395,11 @@ async function startNewTurn(input: {
   stream: boolean;
   toolResults: Map<string, McpToolResultContent[]>;
   configDir?: string;
+  metaKind: MetaRequestKind;
   res: ServerResponse;
 }): Promise<void> {
-  const { body, messages, key, model, requestedModel, stream, configDir, res } = input;
+  const { body, messages, key, model, requestedModel, stream, configDir, metaKind, res } = input;
+  const isMeta = metaKind !== null;
   const existing = findBridgeByConversation(key);
   if (existing) {
     await stopConversationBridges(key, "Superseded by a newer turn");
@@ -430,8 +439,8 @@ async function startNewTurn(input: {
     for (const resolve of waiters) resolve();
   };
 
-  const openCodeTools = body.tools;
-  const prompt: string | SdkUserPrompt = latestUserPrompt(messages);
+  const openCodeTools = isMeta ? [] : body.tools;
+  let prompt: string | SdkUserPrompt = isMeta ? buildMetaPrompt(metaKind!, messages) : latestUserPrompt(messages);
   const priorMessages = priorMessagesOf(messages);
   const promptEmpty = typeof prompt === "string" ? prompt.length === 0 : false;
   if (promptEmpty && openCodeTools.length === 0) {
@@ -441,56 +450,60 @@ async function startNewTurn(input: {
 
   const prints = userHistoryFingerprints(messages);
   const before = userHistoryFingerprints(priorMessages);
-  const sessionId = getForeignSessionId(key);
-  const probeFor = (id: string): SessionFileProbe | null => {
-    const file = findClaudeSessionFile(id, configDir);
-    if (!file) return null;
-    return {
-      exists: true,
-      hasEntry: (uuid) => sessionFileHasEntry(file, uuid),
-      chainAfterLeaf: (uuid) => sessionChainAfterLeaf(file, uuid),
-      lastEntry: () => lastChainEntryUuid(file),
+  let resume: string | undefined;
+  if (!isMeta) {
+    const sessionId = getForeignSessionId(key);
+    const probeFor = (id: string): SessionFileProbe | null => {
+      const file = findClaudeSessionFile(id, configDir);
+      if (!file) return null;
+      return {
+        exists: true,
+        hasEntry: (uuid) => sessionFileHasEntry(file, uuid),
+        chainAfterLeaf: (uuid) => sessionChainAfterLeaf(file, uuid),
+        lastEntry: () => lastChainEntryUuid(file),
+      };
     };
-  };
-  const plan = planResume({
-    turns: getSessionTurns(key),
-    prints: before,
-    priorMessages,
-    sessionId,
-    leafUuid: getSessionLeafUuid(key),
-    probeFor,
-  });
-  let resume = plan.resume;
-  let missedMessages: ZedMessage[] = plan.missedMessages;
-  let transcriptMode = plan.transcript;
-  if (plan.clearBinding) clearForeignSessionId(key);
-  if (plan.rewindIndex !== undefined) rewindSessionTurns(key, plan.rewindIndex);
-  if (plan.forkAt) {
-    try {
-      const forked = await getClaudeSessionForker()(plan.forkAt.sessionId, plan.forkAt.leafUuid);
-      const forkedFile = findClaudeSessionFile(forked, configDir);
-      if (!forkedFile) throw new Error("Forked session transcript not found");
-      setForeignSessionId(key, forked, {
-        modelId: model,
-        cwd,
-        leafUuid: lastChainEntryUuid(forkedFile),
-      });
-      resume = forked;
-    } catch {
-      clearForeignSessionId(key);
-      resume = undefined;
-      missedMessages = priorMessages;
-      transcriptMode = "history";
+    const plan = planResume({
+      turns: getSessionTurns(key),
+      prints: before,
+      priorMessages,
+      sessionId,
+      leafUuid: getSessionLeafUuid(key),
+      probeFor,
+    });
+    resume = plan.resume;
+    let missedMessages: ZedMessage[] = plan.missedMessages;
+    let transcriptMode = plan.transcript;
+    if (plan.clearBinding) clearForeignSessionId(key);
+    if (plan.rewindIndex !== undefined) rewindSessionTurns(key, plan.rewindIndex);
+    if (plan.forkAt) {
+      try {
+        const forked = await getClaudeSessionForker()(plan.forkAt.sessionId, plan.forkAt.leafUuid);
+        const forkedFile = findClaudeSessionFile(forked, configDir);
+        if (!forkedFile) throw new Error("Forked session transcript not found");
+        setForeignSessionId(key, forked, {
+          modelId: model,
+          cwd,
+          leafUuid: lastChainEntryUuid(forkedFile),
+        });
+        resume = forked;
+      } catch {
+        clearForeignSessionId(key);
+        resume = undefined;
+        missedMessages = priorMessages;
+        transcriptMode = "history";
+      }
     }
+    const transcript =
+      transcriptMode === "history"
+        ? buildConversationTranscript(priorMessages)
+        : transcriptMode === "missed"
+          ? buildConversationTranscript(missedMessages)
+          : "";
+    const withContext = withConversationContext(prompt, transcript, Boolean(resume));
+    prompt = typeof withContext === "string" ? withContext || " " : withContext;
   }
-  const transcript =
-    transcriptMode === "history"
-      ? buildConversationTranscript(priorMessages)
-      : transcriptMode === "missed"
-        ? buildConversationTranscript(missedMessages)
-        : "";
-  const withContext = withConversationContext(prompt, transcript, Boolean(resume));
-  const claudePrompt: string | SdkUserPrompt = typeof withContext === "string" ? withContext || " " : withContext;
+  const claudePrompt: string | SdkUserPrompt = typeof prompt === "string" ? prompt || " " : prompt;
 
   const mcpServers =
     openCodeTools.length > 0 ? await buildZedMcpServer(openCodeTools, pendingTools, notifyPark) : undefined;
@@ -518,22 +531,28 @@ async function startNewTurn(input: {
         prompt: claudePrompt as string | AsyncIterable<unknown>,
         cwd,
         model,
-        resume: resume ?? undefined,
+        resume: isMeta ? undefined : resume,
         env,
-        mcpServers,
-        autoCompactEnabled: true,
+        mcpServers: isMeta ? undefined : mcpServers,
+        autoCompactEnabled: !isMeta,
         isolateMcp: true,
-        settingSources: ["project"],
+        settingSources: isMeta ? [] : ["project"],
+        skills: isMeta ? [] : undefined,
+        persistSession: isMeta ? false : undefined,
+        maxTurns: isMeta ? 1 : undefined,
+        thinking: isMeta ? { type: "disabled" } : undefined,
         tools: [],
         toolAliases,
         allowedTools: openCodeTools.length > 0 ? toolNames.map((n) => `mcp__zed__${n}`) : undefined,
         permissionMode: "dontAsk",
-        systemPrompt: {
-          type: "preset",
-          preset: "claude_code",
-          excludeDynamicSections: true,
-          append: "Built-in Claude Code tools are disabled. Use only the mcp__zed__* tools provided for this turn. Batch independent tool calls into a single turn.",
-        },
+        systemPrompt: isMeta
+          ? UTILITY_SYSTEM_PROMPT
+          : {
+              type: "preset",
+              preset: "claude_code",
+              excludeDynamicSections: true,
+              append: "Built-in Claude Code tools are disabled. Use only the mcp__zed__* tools provided for this turn. Batch independent tool calls into a single turn.",
+            },
       }),
     );
   } catch (error) {
@@ -542,21 +561,23 @@ async function startNewTurn(input: {
     sendError(res, (error as { statusCode?: number }).statusCode ?? failureStatusFor(kind), message);
     return;
   }
-  if (prints.length > 0) {
+  if (!isMeta && prints.length > 0) {
     recordTurnStart(key, { count: prints.length, hash: prints.at(-1)! }, before.length > 0 ? { count: before.length, hash: before.at(-1)! } : undefined);
   }
   bridge.handle = handle;
-  handle.onEvent((event) => {
-    const e = event as Record<string, unknown>;
-    const sessionId = typeof e.session_id === "string" ? e.session_id : null;
-    if (sessionId) {
-      setForeignSessionId(key, sessionId, {
-        modelId: model,
-        cwd,
-        leafUuid: typeof e.uuid === "string" ? e.uuid : undefined,
-      });
-    }
-  });
+  if (!isMeta) {
+    handle.onEvent((event) => {
+      const e = event as Record<string, unknown>;
+      const sessionId = typeof e.session_id === "string" ? e.session_id : null;
+      if (sessionId) {
+        setForeignSessionId(key, sessionId, {
+          modelId: model,
+          cwd,
+          leafUuid: typeof e.uuid === "string" ? e.uuid : undefined,
+        });
+      }
+    });
+  }
   putBridge(bridge);
 
   let reapTimer: ReturnType<typeof setTimeout> | null = null;

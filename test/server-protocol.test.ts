@@ -1,8 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { mockHandle, startTestServer } from "./helpers/server.ts";
+import { conversationKey, getForeignSessionId } from "../src/store.ts";
 import { isNarrationSignature } from "../src/server.ts";
-import { setClaudeQueryStarter } from "../src/sdk.ts";
+import { setClaudeQueryStarter, type StartClaudeQueryParams } from "../src/sdk.ts";
 
 const streamEvents = [
   {
@@ -108,6 +109,39 @@ describe("usage protocol", () => {
       );
       const response = await post(testServer.port, false);
       assert.equal(response.status, 500);
+    } finally {
+      await testServer.close();
+    }
+  });
+
+  it("runs a Zed commit request as a utility turn", async () => {
+    const testServer = await startTestServer();
+    let captured: StartClaudeQueryParams | undefined;
+    const messages = [
+      { role: "system", content: "You are an expert at writing Git commits." },
+      { role: "user", content: "diff --git a/x b/x" },
+    ];
+    try {
+      setClaudeQueryStarter(async (params) => {
+        captured = params;
+        return mockHandle([{ type: "result", is_error: false, usage: { input_tokens: 1, output_tokens: 1 } }]);
+      });
+      const response = await fetch(`http://127.0.0.1:${testServer.port}/v1/chat/completions`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: "claude-opus-5-5", stream: false, messages }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(captured?.persistSession, false);
+      assert.equal(captured?.maxTurns, 1);
+      assert.equal(captured?.autoCompactEnabled, false);
+      assert.deepEqual(captured?.thinking, { type: "disabled" });
+      assert.deepEqual(captured?.settingSources, []);
+      assert.deepEqual(captured?.skills, []);
+      assert.equal(captured?.mcpServers, undefined);
+      assert.deepEqual(captured?.tools, []);
+      assert.equal(typeof captured?.systemPrompt, "string");
+      assert.equal(getForeignSessionId(conversationKey(messages, "claude-opus-5-5")), undefined);
     } finally {
       await testServer.close();
     }

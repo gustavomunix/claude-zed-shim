@@ -2,6 +2,9 @@ import { extractTextContent, type HistoryMessage } from "./translate.ts";
 
 export type MetaRequestKind = "title" | "summary" | "commit" | null;
 
+export const UTILITY_SYSTEM_PROMPT =
+  "You are a text generation helper running through the Claude Code harness. Follow the instructions in the user message and return only the requested output.";
+
 const TITLE_MARKER = "Generate a concise 3-7 word title for this conversation";
 const SUMMARY_MARKERS = [
   "Summarize the conversation so far to free up context",

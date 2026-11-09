@@ -306,7 +306,9 @@ export async function startClaudeQuery(params: StartClaudeQueryParams): Promise<
     options.thinking = params.thinking;
   }
 
-  if (params.autoCompactEnabled !== false) {
+  if (params.autoCompactEnabled === false) {
+    options.autoCompactEnabled = false;
+  } else if (params.autoCompactEnabled !== undefined) {
     options.autoCompactEnabled = true;
   }
 
