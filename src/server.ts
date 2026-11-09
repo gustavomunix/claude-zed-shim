@@ -430,7 +430,7 @@ async function startNewTurn(input: {
     const match = matchTurnHistory(turns, userHistoryFingerprints(priorMessages));
     if (match.kind === "latest") {
       missedMessages = historyAfterUserCount(priorMessages, match.count);
-    } else {
+    } else if (match.kind === "diverged") {
       clearForeignSessionId(key);
       resume = undefined;
     }
