@@ -83,6 +83,29 @@ describe("session boundaries", () => {
     });
   });
 
+  it("stamps old boundaries when the session changes", () => {
+    withTempData(() => {
+      setForeignSessionId("k4", "s1", { leafUuid: "leaf-a" });
+      recordTurnStart("k4", { count: 1, hash: "a" });
+      setForeignSessionId("k4", "s1", { leafUuid: "leaf-b" });
+      recordTurnStart("k4", { count: 2, hash: "b" });
+      setForeignSessionId("k4", "s2", { leafUuid: "leaf-c" });
+      assert.equal(getSessionTurns("k4")[0]?.sessionId, "s1");
+    });
+  });
+
+  it("clears the leaf when rewinding into another session", () => {
+    withTempData(() => {
+      setForeignSessionId("k5", "s1", { leafUuid: "leaf-a" });
+      recordTurnStart("k5", { count: 1, hash: "a" });
+      setForeignSessionId("k5", "s1", { leafUuid: "leaf-b" });
+      recordTurnStart("k5", { count: 2, hash: "b" });
+      setForeignSessionId("k5", "s2", { leafUuid: "leaf-c" });
+      rewindSessionTurns("k5", 0);
+      assert.equal(getSessionLeafUuid("k5"), undefined);
+    });
+  });
+
   it("rewinds and forgets later boundaries", () => {
     withTempData(() => {
       setForeignSessionId("k3", "s1", { leafUuid: "leaf-a" });
