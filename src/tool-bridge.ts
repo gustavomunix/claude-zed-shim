@@ -53,10 +53,24 @@ export const PARALLEL_SAFE_TOOLS = new Set([
   "subagent",
 ]);
 
-export const CLAUDE_TOOL_DESCRIPTION_LIMIT = 8192;
+export const CLAUDE_TOOL_DESCRIPTION_LIMIT =
+  Number.parseInt(process.env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH ?? "", 10) || 8192;
 
-export function fitToolDescription(description: string): string {
-  return description.length <= CLAUDE_TOOL_DESCRIPTION_LIMIT ? description : description.slice(0, CLAUDE_TOOL_DESCRIPTION_LIMIT);
+const AGENT_LIST_MARKERS = [
+  "Available subagents:",
+  "Available agent types and the tools they have access to:",
+];
+
+export function fitToolDescription(description: string, limit = CLAUDE_TOOL_DESCRIPTION_LIMIT): string {
+  if (description.length <= limit) return description;
+  for (const marker of AGENT_LIST_MARKERS) {
+    const at = description.indexOf(marker);
+    if (at <= 0) continue;
+    const agents = description.slice(at).trim();
+    const guidance = description.slice(0, at).trim();
+    return (guidance ? `${agents}\n\n${guidance}` : agents).slice(0, limit);
+  }
+  return description.slice(0, limit);
 }
 
 function schemaTypes(schema: unknown): string[] {

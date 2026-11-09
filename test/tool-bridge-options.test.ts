@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   buildZedMcpServer,
   describeZedTools,
+  fitToolDescription,
   withStringCoercion,
   type ZedOpenAITool,
 } from "../src/tool-bridge.ts";
@@ -77,6 +78,15 @@ describe("withStringCoercion", () => {
       sdk,
     );
     assert.deepEqual(captured!.parse({ count: "5", extra: 1 }), { count: 5, extra: 1 });
+  });
+});
+
+describe("fitToolDescription", () => {
+  it("keeps the subagent list at the front of a truncated description", () => {
+    const description = `${"x".repeat(9000)}\n\nAvailable subagents:\n- writer\n- reviewer`;
+    const fitted = fitToolDescription(description, 8192);
+    assert.match(fitted, /^Available subagents:/);
+    assert.equal(fitted.length, 8192);
   });
 });
 
