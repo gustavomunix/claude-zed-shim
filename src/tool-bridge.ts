@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MCP_DESCRIPTION_LIMIT } from "./env.ts";
 
 export type ParkedToolCall = {
   id: string;
@@ -53,8 +54,12 @@ export const PARALLEL_SAFE_TOOLS = new Set([
   "subagent",
 ]);
 
+const configuredDescriptionLimit = Number.parseInt(process.env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH ?? "", 10);
+
 export const CLAUDE_TOOL_DESCRIPTION_LIMIT =
-  Number.parseInt(process.env.CLAUDE_CODE_MAX_MCP_DESCRIPTION_LENGTH ?? "", 10) || 8192;
+  Number.isFinite(configuredDescriptionLimit) && configuredDescriptionLimit > 0
+    ? configuredDescriptionLimit
+    : MCP_DESCRIPTION_LIMIT;
 
 const AGENT_LIST_MARKERS = [
   "Available subagents:",

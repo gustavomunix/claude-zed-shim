@@ -88,6 +88,11 @@ describe("fitToolDescription", () => {
     assert.match(fitted, /^Available subagents:/);
     assert.equal(fitted.length, 8192);
   });
+
+  it("handles a marker at index zero and a description without markers", () => {
+    assert.match(fitToolDescription(`Available subagents:\n- a${"x".repeat(9000)}`, 50), /^Available subagent/);
+    assert.equal(fitToolDescription("x".repeat(9000), 100).length, 100);
+  });
 });
 
 describe("describeZedTools", () => {
