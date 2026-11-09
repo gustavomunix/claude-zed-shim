@@ -1,41 +1,41 @@
 #!/bin/sh
 set -eu
 
-label=dev.claude-zed-shim
 port=${PORT:-8124}
 config_dir=${CONFIG_DIR:-}
 provider_id=${PROVIDER_ID:-claude-code}
+label="dev.claude-zed-shim-$port"
+old_label="dev.claude-zed-shim"
 root=$(cd "$(dirname "$0")/.." && pwd)
 plist="$HOME/Library/LaunchAgents/$label.plist"
+old_plist="$HOME/Library/LaunchAgents/$old_label.plist"
 log_dir="$HOME/Library/Logs/claude-zed-shim"
 domain="gui/$(id -u)"
 
-if [ "${1:-}" = "uninstall" ]; then
-  launchctl bootout "$domain/$label" 2>/dev/null || true
-  rm -f "$plist"
-  echo "Removed $label"
-  exit 0
-fi
+xml_escape() {
+  printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'
+}
 
-node_bin=$(command -v node || true)
-if [ -z "$node_bin" ]; then
-  echo "node not found in PATH" >&2
-  exit 1
-fi
+remove_legacy() {
+  if [ "$port" = "8124" ]; then
+    launchctl bootout "$domain/$old_label" 2>/dev/null || true
+    rm -f "$old_plist"
+  fi
+}
 
-cd "$root"
-npm install
-npm run build
+build_plist() {
+  escaped_node=$(xml_escape "$node_bin")
+  escaped_root=$(xml_escape "$root")
+  escaped_log_dir=$(xml_escape "$log_dir")
+  escaped_provider=$(xml_escape "$provider_id")
 
-mkdir -p "$log_dir" "$(dirname "$plist")"
+  config_args=""
+  if [ -n "$config_dir" ]; then
+    config_args="    <string>--config-dir</string>
+    <string>$(xml_escape "$config_dir")</string>"
+  fi
 
-extra_args=""
-if [ -n "$config_dir" ]; then
-  extra_args="$extra_args  <string>--config-dir</string>
-    <string>$config_dir</string>"
-fi
-
-cat > "$plist" <<EOF
+  cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -44,16 +44,17 @@ cat > "$plist" <<EOF
   <string>$label</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$node_bin</string>
-    <string>$root/dist/cli.js</string>
+    <string>$escaped_node</string>
+    <string>$escaped_root/dist/cli.js</string>
     <string>serve</string>
     <string>--port</string>
-    <string>$port</string>$extra_args
+    <string>$port</string>
+$config_args
     <string>--provider-id</string>
-    <string>$provider_id</string>
+    <string>$escaped_provider</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>$root</string>
+  <string>$escaped_root</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
@@ -67,12 +68,40 @@ cat > "$plist" <<EOF
   <key>LowPriorityIO</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>$log_dir/out.log</string>
+  <string>$escaped_log_dir/out.log</string>
   <key>StandardErrorPath</key>
-  <string>$log_dir/err.log</string>
+  <string>$escaped_log_dir/err.log</string>
 </dict>
 </plist>
 EOF
+}
+
+if [ "${1:-}" = "uninstall" ]; then
+  launchctl bootout "$domain/$label" 2>/dev/null || true
+  rm -f "$plist"
+  remove_legacy
+  echo "Removed $label"
+  exit 0
+fi
+
+node_bin=$(command -v node || true)
+if [ -z "$node_bin" ]; then
+  echo "node not found in PATH" >&2
+  exit 1
+fi
+
+if [ "${DRY_RUN:-}" = "1" ]; then
+  build_plist
+  exit 0
+fi
+
+cd "$root"
+npm install
+npm run build
+
+mkdir -p "$log_dir" "$(dirname "$plist")"
+build_plist > "$plist"
+remove_legacy
 
 launchctl bootout "$domain/$label" 2>/dev/null || true
 launchctl bootstrap "$domain" "$plist"
