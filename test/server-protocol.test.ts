@@ -56,7 +56,7 @@ describe("usage protocol", () => {
   it("emits usage in a non-streaming response", async () => {
     const testServer = await startTestServer();
     try {
-      setClaudeQueryStarter(async () => mockHandle([streamEvents.at(-1)!]));
+      setClaudeQueryStarter(async () => mockHandle(streamEvents));
       const response = await post(testServer.port, false);
       assert.equal(response.status, 200);
       const body = (await response.json()) as { usage: unknown };
