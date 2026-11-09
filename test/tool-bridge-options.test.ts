@@ -14,13 +14,39 @@ const tool = (name: string): ZedOpenAITool => ({
 });
 
 describe("withStringCoercion", () => {
-  it("coerces string arguments before validation", () => {
-    const schema = { type: "object", properties: { count: { type: "number" } } };
+  const parse = (schema: Record<string, unknown>, value: unknown) => {
     const shape = (
       z.fromJSONSchema(schema as never) as unknown as { loose: () => { parse: (value: unknown) => unknown } }
     ).loose();
     const coerced = withStringCoercion(shape, schema) as { parse: (value: unknown) => unknown };
-    assert.deepEqual(coerced.parse({ count: "5" }), { count: 5 });
+    return coerced.parse(value);
+  };
+
+  it("coerces string arguments before validation", () => {
+    assert.deepEqual(parse({ type: "object", properties: { count: { type: "number" } } }, { count: "5" }), { count: 5 });
+    assert.deepEqual(parse({ type: "object", properties: { flag: { type: "boolean" } } }, { flag: "true" }), {
+      flag: true,
+    });
+    assert.deepEqual(parse({ type: "object", properties: { items: { type: "array" } } }, { items: "[1]" }), {
+      items: [1],
+    });
+    assert.deepEqual(parse({ type: "object", properties: { obj: { type: "object" } } }, { obj: '{"a":1}' }), {
+      obj: { a: 1 },
+    });
+  });
+
+  it("leaves strings and unions alone", () => {
+    assert.deepEqual(parse({ type: "object", properties: { q: { type: "string" } } }, { q: "5" }), { q: "5" });
+    assert.deepEqual(
+      parse({ type: "object", properties: { q: { anyOf: [{ type: "number" }, { type: "string" }] } } }, { q: "5" }),
+      { q: "5" },
+    );
+  });
+
+  it("preserves schema defaults for omitted keys", () => {
+    assert.deepEqual(parse({ type: "object", properties: { count: { type: "number", default: 3 } } }, {}), {
+      count: 3,
+    });
   });
 });
 

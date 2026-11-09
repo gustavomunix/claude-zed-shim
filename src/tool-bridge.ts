@@ -92,6 +92,29 @@ export function coerceStringArgument(value: unknown, schema: unknown): unknown {
   return value;
 }
 
+function jsonSchemaToZodShape(schema: Record<string, unknown>): Record<string, z.ZodTypeAny> {
+  const props =
+    schema.properties && typeof schema.properties === "object"
+      ? (schema.properties as Record<string, unknown>)
+      : {};
+  const required = new Set(
+    Array.isArray(schema.required) ? schema.required.filter((value): value is string => typeof value === "string") : [],
+  );
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const [key, prop] of Object.entries(props)) {
+    const type = prop && typeof prop === "object" ? (prop as { type?: unknown }).type : undefined;
+    let field: z.ZodTypeAny = z.any();
+    if (type === "string") field = z.string();
+    else if (type === "number" || type === "integer") field = z.number();
+    else if (type === "boolean") field = z.boolean();
+    else if (type === "array") field = z.array(z.any());
+    else if (type === "object") field = z.object({}).catchall(z.any());
+    if (!required.has(key)) field = field.optional();
+    shape[key] = field;
+  }
+  return shape;
+}
+
 export function withStringCoercion(shape: unknown, schema: Record<string, unknown>): unknown {
   const props =
     schema.properties && typeof schema.properties === "object"
@@ -189,7 +212,7 @@ export async function buildZedMcpServer(
         try {
           shape = (z as unknown as { fromJSONSchema: (s: unknown) => { loose: () => unknown } }).fromJSONSchema(params).loose();
         } catch {
-          shape = z.object({}).catchall(z.any());
+          shape = jsonSchemaToZodShape(params);
         }
         shape = withStringCoercion(shape, params);
         return toolFactory(
