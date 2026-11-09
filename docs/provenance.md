@@ -12,7 +12,7 @@ Origem da casca Zed:
 - CLI `serve/models/status/self-test`: `src/cli.ts`.
 - Instaladores, runners e `settings.example.json`.
 - Formato do snippet `language_models.openai_compatible`.
-- `src/translate.ts`: `openAICompletion`, `openAIError`, `openAIStreamChunk`, `openAIUsageChunk`.
+- `antigravity-zed-shim/src/translate.ts`: `openAICompletion`, `openAIError`, `openAIStreamChunk`, `openAIUsageChunk`.
 
 O shim troca o upstream Antigravity pelo Claude Agent SDK, mas mantém a forma do provider e a disciplina de rodar em `127.0.0.1`.
 

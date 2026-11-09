@@ -88,7 +88,7 @@ node dist\cli.js models --port 8125 --provider-id claude-code-2
 
 4. Merge into Zed `settings.json` under `language_models.openai_compatible` next to `claude-code`. For the Zed ACP path, duplicate `agent_servers.Claude` as e.g. `Claude (work)` and set `"env": { "CLAUDE_CONFIG_DIR": "%USERPROFILE%\\.claude-account2" }`.
 
-Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process; each instance owns its account. The provider id is free — name each instance whatever makes sense for you (`--provider-id claude-code-work`, `claude-code-personal`, …); it is only the key in Zed's `settings.json` / OpenCode's `opencode.json`.
+Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process; each instance owns its account. The provider id is free — name each instance whatever makes sense for you (`--provider-id claude-code-work`, `claude-code-personal`, …); it is only the key in Zed's `settings.json` / OpenCode's `opencode.jsonc`.
 
 ### OpenCode (v2)
 
@@ -104,7 +104,7 @@ Merge the printed `providers.claude-luciana` object into `~/.config/opencode/ope
 {
   "providers": {
     "claude-luciana": {
-      "name": "Claude (Luciana)",
+      "name": "Claude (claude-luciana)",
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "http://127.0.0.1:8125/v1",
