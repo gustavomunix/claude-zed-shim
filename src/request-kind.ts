@@ -1,4 +1,9 @@
-import { extractTextContent, type HistoryMessage } from "./translate.ts";
+import {
+  buildConversationTranscript,
+  extractTextContent,
+  priorMessagesOf,
+  type HistoryMessage,
+} from "./translate.ts";
 
 export type MetaRequestKind = "title" | "summary" | "commit" | null;
 
@@ -9,6 +14,8 @@ const TITLE_MARKER = "Generate a concise 3-7 word title for this conversation";
 const SUMMARY_MARKERS = [
   "Summarize the conversation so far to free up context",
   "Compact the conversation so far.",
+  "Generate a detailed summary of this conversation",
+  "You are compacting this conversation into a handoff",
 ];
 const COMMIT_MARKER = "You are an expert at writing Git commits.";
 
@@ -19,6 +26,10 @@ function systemText(messages: HistoryMessage[]): string {
     .join("\n");
 }
 
+function allText(messages: HistoryMessage[]): string {
+  return messages.map((message) => extractTextContent(message.content)).join("\n");
+}
+
 function latestUserText(messages: HistoryMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "user") return extractTextContent(messages[i]!.content).trim();
@@ -27,10 +38,10 @@ function latestUserText(messages: HistoryMessage[]): string {
 }
 
 export function detectMetaRequestKind(messages: HistoryMessage[]): MetaRequestKind {
-  const system = systemText(messages);
-  if (system.includes(TITLE_MARKER)) return "title";
-  if (system.includes(COMMIT_MARKER)) return "commit";
-  if (SUMMARY_MARKERS.some((marker) => system.includes(marker))) return "summary";
+  const text = allText(messages);
+  if (text.includes(TITLE_MARKER)) return "title";
+  if (text.includes(COMMIT_MARKER)) return "commit";
+  if (SUMMARY_MARKERS.some((marker) => text.includes(marker))) return "summary";
   return null;
 }
 
@@ -39,6 +50,10 @@ const DEFAULT_TITLE_INSTRUCTIONS =
 
 export function buildMetaPrompt(kind: Exclude<MetaRequestKind, null>, messages: HistoryMessage[]): string {
   const system = systemText(messages).trim();
-  const instructions = system || (kind === "title" ? DEFAULT_TITLE_INSTRUCTIONS : "Follow the instructions in the request below.");
-  return `<instructions>\n${instructions}\n</instructions>\n\n${latestUserText(messages)}`;
+  const instructions =
+    system || (kind === "title" ? DEFAULT_TITLE_INSTRUCTIONS : "Follow the instructions in the request below.");
+  const history =
+    kind === "commit" ? "" : buildConversationTranscript(priorMessagesOf(messages)).trim();
+  const context = history ? `<conversation_history>\n${history}\n</conversation_history>\n\n` : "";
+  return `<instructions>\n${instructions}\n</instructions>\n\n${context}${latestUserText(messages)}`;
 }

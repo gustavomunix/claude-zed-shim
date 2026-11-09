@@ -19,9 +19,36 @@ describe("detectMetaRequestKind", () => {
     assert.equal(detectMetaRequestKind(system("You are a coding agent.")), null);
   });
 
+  it("recognizes markers in the last user message", () => {
+    assert.equal(
+      detectMetaRequestKind([{ role: "user", content: "Generate a concise 3-7 word title for this conversation" }]),
+      "title",
+    );
+    assert.equal(
+      detectMetaRequestKind([{ role: "user", content: "Generate a detailed summary of this conversation" }]),
+      "summary",
+    );
+    assert.equal(
+      detectMetaRequestKind([{ role: "user", content: "You are compacting this conversation into a handoff" }]),
+      "summary",
+    );
+  });
+
   it("builds an instructions prompt with the user request", () => {
     const prompt = buildMetaPrompt("commit", system("You are an expert at writing Git commits."));
     assert.match(prompt, /<instructions>/);
     assert.match(prompt, /the request/);
+  });
+
+  it("includes prior conversation for title and summary", () => {
+    const messages = [
+      { role: "user", content: "first question" },
+      { role: "assistant", content: "first answer" },
+      { role: "user", content: "Generate a concise 3-7 word title for this conversation" },
+    ];
+    const prompt = buildMetaPrompt("title", messages);
+    assert.match(prompt, /first question/);
+    assert.match(prompt, /first answer/);
+    assert.match(prompt, /Generate a concise/);
   });
 });

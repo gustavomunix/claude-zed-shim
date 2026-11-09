@@ -118,8 +118,10 @@ describe("usage protocol", () => {
     const testServer = await startTestServer();
     let captured: StartClaudeQueryParams | undefined;
     const messages = [
-      { role: "system", content: "You are an expert at writing Git commits." },
-      { role: "user", content: "diff --git a/x b/x" },
+      {
+        role: "user",
+        content: "You are an expert at writing Git commits.\n\ndiff --git a/x b/x",
+      },
     ];
     try {
       setClaudeQueryStarter(async (params) => {
@@ -140,7 +142,9 @@ describe("usage protocol", () => {
       assert.deepEqual(captured?.skills, []);
       assert.equal(captured?.mcpServers, undefined);
       assert.deepEqual(captured?.tools, []);
-      assert.equal(typeof captured?.systemPrompt, "string");
+      assert.equal(captured?.resume, undefined);
+      assert.match(String(captured?.systemPrompt), /text generation helper/);
+      assert.match(String(captured?.prompt), /diff --git/);
       assert.equal(getForeignSessionId(conversationKey(messages, "claude-opus-5-5")), undefined);
     } finally {
       await testServer.close();
