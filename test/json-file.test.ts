@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { readJsonFile, writeJsonFileAtomic } from "../src/json-file.ts";
@@ -39,6 +39,21 @@ describe("json-file", () => {
       assert.throws(() => writeJsonFileAtomic(path, circular), TypeError);
       assert.throws(() => writeJsonFileAtomic(path, undefined), TypeError);
       assert.deepEqual(readdirSync(dir).filter((name) => name.endsWith(".tmp")), []);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("rethrows permission errors instead of returning null", () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-json-"));
+    try {
+      const path = join(dir, "value.json");
+      writeJsonFileAtomic(path, { ok: true });
+      if (process.getuid?.() !== 0) {
+        chmodSync(path, 0o000);
+        assert.throws(() => readJsonFile(path), (error: NodeJS.ErrnoException) => error.code === "EACCES");
+        chmodSync(path, 0o600);
+      }
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

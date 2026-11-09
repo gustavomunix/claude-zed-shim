@@ -27,14 +27,27 @@ export function writeJsonFileAtomic(path: string, value: unknown): void {
 
   mkdirSync(dirname(path), { recursive: true });
   const tempPath = `${path}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
+  const data = Buffer.from(`${json}\n`);
   let fd: number | undefined;
   try {
     fd = openSync(tempPath, "w", 0o600);
-    writeSync(fd, `${json}\n`);
+    let offset = 0;
+    while (offset < data.length) {
+      offset += writeSync(fd, data, offset, data.length - offset);
+    }
     fsyncSync(fd);
     closeSync(fd);
     fd = undefined;
     renameSync(tempPath, path);
+    try {
+      const dirFd = openSync(dirname(path), "r");
+      try {
+        fsyncSync(dirFd);
+      } finally {
+        closeSync(dirFd);
+      }
+    } catch {
+    }
   } catch (error) {
     if (fd !== undefined) {
       try {
