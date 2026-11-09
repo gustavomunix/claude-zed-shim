@@ -51,7 +51,7 @@ import {
   setForeignSessionId,
 } from "./store.ts";
 import { planResume, type SessionFileProbe } from "./resume.ts";
-import type { OpenAIUsage } from "./usage.ts";
+import { TurnUsageTracker, resolveTurnUsage, type OpenAIUsage } from "./usage.ts";
 import {
   findClaudeSessionFile,
   lastChainEntryUuid,
@@ -726,6 +726,8 @@ async function relayStreamToResponse(
   emit(JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { role: "assistant" }, finish_reason: null }] }));
   let finishReason: string | null = "stop";
   const mapState: MapState = { messageId: null };
+  const tracker = new TurnUsageTracker(bridge.reportedUsage);
+  let resultUsage: OpenAIUsage | null = null;
   const heartbeat = setInterval(() => {
     try {
       res.write(": ping\n\n");
@@ -758,12 +760,28 @@ async function relayStreamToResponse(
       if (mapped.kind === "reasoning" && mapped.text) {
         emit(JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: { reasoning_content: mapped.text }, finish_reason: null }] }));
       }
+      if (mapped.kind === "usage-delta") {
+        tracker.add(mapped.usage, mapped.messageId);
+      }
+      if (mapped.kind === "usage") {
+        resultUsage = mapped.usage;
+      }
       if (mapped.kind === "error") {
         emit(JSON.stringify({ error: { message: mapped.text, type: "claude_error" } }));
         finishReason = "stop";
       }
     }
-    emit(JSON.stringify({ id, object: "chat.completion.chunk", created, model, choices: [{ index: 0, delta: {}, finish_reason: finishReason }] }));
+    const usage = resolveTurnUsage(tracker.total(), resultUsage);
+    emit(
+      JSON.stringify({
+        id,
+        object: "chat.completion.chunk",
+        created,
+        model,
+        choices: [{ index: 0, delta: {}, finish_reason: finishReason }],
+        ...(usage ? { usage } : {}),
+      }),
+    );
   } finally {
     clearInterval(heartbeat);
   }
@@ -779,8 +797,8 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
   const created = Math.floor(Date.now() / 1000);
   let content = "";
   const toolCalls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> = [];
-  let promptTokens = 0;
-  let completionTokens = 0;
+  const tracker = new TurnUsageTracker(bridge.reportedUsage);
+  let resultUsage: OpenAIUsage | null = null;
   const mapState: MapState = { messageId: null };
   let errorText: string | null = null;
   for await (const event of events) {
@@ -791,10 +809,10 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
       }
     } else if (mapped.kind === "text") {
       content += mapped.text;
-    } else if (mapped.kind === "usage" || mapped.kind === "usage-delta") {
-      const u: OpenAIUsage = mapped.usage;
-      promptTokens += u.prompt_tokens;
-      completionTokens += u.completion_tokens;
+    } else if (mapped.kind === "usage-delta") {
+      tracker.add(mapped.usage, mapped.messageId);
+    } else if (mapped.kind === "usage") {
+      resultUsage = mapped.usage;
     } else if (mapped.kind === "error") {
       errorText = mapped.text;
     }
@@ -804,9 +822,13 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
     sendError(res, failureStatusFor(kind), errorText);
     return;
   }
-  const total = promptTokens + completionTokens;
+  const usage = resolveTurnUsage(tracker.total(), resultUsage) ?? {
+    prompt_tokens: 0,
+    completion_tokens: 0,
+    total_tokens: 0,
+  };
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(openAICompletion(id, created, model, content, toolCalls, { prompt_tokens: promptTokens, completion_tokens: completionTokens, total_tokens: total }));
+  res.end(openAICompletion(id, created, model, content, toolCalls, usage));
 }
 
 export function startServer(port: number): Server {
