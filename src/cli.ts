@@ -3,7 +3,10 @@ import { resolve } from "node:path";
 import { fetchModelCatalog, startServer } from "./server.ts";
 import { checkSubscriptionAuth } from "./auth.ts";
 import { resolveClaudeCli } from "./cli-path.ts";
-import { getClaudeModels, invalidateModelsCache } from "./models.ts";
+import { defaultMaxTokens, getClaudeModels, invalidateModelsCache } from "./models.ts";
+import { buildOpenCodeSnippet, buildZedSnippet, type SnippetFormat } from "./snippets.ts";
+
+export { defaultMaxTokens } from "./models.ts";
 
 export const DEFAULT_PORT = 8124;
 export const DEFAULT_PROVIDER_ID = "claude-code";
@@ -13,6 +16,7 @@ export type CliOptions = {
   port: number;
   configDir?: string;
   providerId: string;
+  format: SnippetFormat;
 };
 
 export function parseCliOptions(rest: string[]): CliOptions {
@@ -29,7 +33,12 @@ export function parseCliOptions(rest: string[]): CliOptions {
   const providerId = idFlag >= 0 ? (idRaw ?? "") : DEFAULT_PROVIDER_ID;
   if (!PROVIDER_ID_PATTERN.test(providerId)) throw new Error("Invalid --provider-id value");
 
-  return { port, configDir: dirRaw ? resolve(dirRaw.trim()) : undefined, providerId };
+  const formatFlag = rest.indexOf("--format");
+  const formatRaw = formatFlag >= 0 ? rest[formatFlag + 1] : undefined;
+  const format = formatFlag >= 0 ? formatRaw : "zed";
+  if (format !== "zed" && format !== "opencode") throw new Error("Invalid --format value");
+
+  return { port, configDir: dirRaw ? resolve(dirRaw.trim()) : undefined, providerId, format };
 }
 
 function applyConfigDir(configDir: string | undefined): void {
@@ -39,30 +48,16 @@ function applyConfigDir(configDir: string | undefined): void {
   invalidateModelsCache();
 }
 
-export function defaultMaxTokens(id: string, catalogMax?: number): number {
-  if (catalogMax && catalogMax > 0) return catalogMax;
-  return id.toLowerCase().includes("claude") ? 200_000 : 1_000_000;
-}
-
-async function printModelsSnippet(port: number, providerId: string = DEFAULT_PROVIDER_ID): Promise<void> {
+async function printModelsSnippet(
+  port: number,
+  providerId: string = DEFAULT_PROVIDER_ID,
+  format: SnippetFormat = "zed",
+): Promise<void> {
   const models = await fetchModelCatalog();
   if (models.length === 0) {
     throw new Error("No Claude models found. Check `claude auth status` first.");
   }
-  const snippet = {
-    language_models: {
-      openai_compatible: {
-        [providerId]: {
-          api_url: `http://127.0.0.1:${port}/v1`,
-          available_models: models.map((m) => ({
-            name: m.id,
-            display_name: m.displayName ?? m.id,
-            max_tokens: defaultMaxTokens(m.id, m.maxTokens),
-          })),
-        },
-      },
-    },
-  };
+  const snippet = format === "opencode" ? buildOpenCodeSnippet(models, port, providerId) : buildZedSnippet(models, port, providerId);
   console.log(JSON.stringify(snippet, null, 2));
 }
 
@@ -101,7 +96,7 @@ async function main(): Promise<void> {
     case "models": {
       const options = parseCliOptions(rest);
       applyConfigDir(options.configDir);
-      await printModelsSnippet(options.port, options.providerId);
+      await printModelsSnippet(options.port, options.providerId, options.format);
       break;
     }
     case "status": {

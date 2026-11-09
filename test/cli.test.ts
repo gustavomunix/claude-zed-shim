@@ -24,6 +24,16 @@ describe("parseCliOptions", () => {
     assert.throws(() => parseCliOptions(["--port", "abc"]), /port/);
     assert.throws(() => parseCliOptions(["--port", "0"]), /port/);
   });
+  it("defaults to zed format", () => {
+    assert.equal(parseCliOptions([]).format, "zed");
+  });
+  it("accepts opencode format", () => {
+    assert.equal(parseCliOptions(["--format", "opencode"]).format, "opencode");
+  });
+  it("rejects unknown format", () => {
+    assert.throws(() => parseCliOptions(["--format", "yaml"]), /format/);
+    assert.throws(() => parseCliOptions(["--format"]), /format/);
+  });
 });
 
 describe("defaultMaxTokens", () => {

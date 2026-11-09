@@ -1,0 +1,40 @@
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { buildOpenCodeSnippet, buildZedSnippet } from "../src/snippets.ts";
+import type { ModelInfo } from "../src/server.ts";
+
+const models: ModelInfo[] = [
+  { id: "claude-opus-5-5", displayName: "Opus 5.5", contextWindow: 1_000_000, maxTokens: 128_000 },
+  { id: "claude-opus-5-5:fast", displayName: "Opus 5.5 Fast", contextWindow: 1_000_000, maxTokens: 128_000 },
+];
+
+describe("buildZedSnippet", () => {
+  it("builds the openai-compatible provider block", () => {
+    const snippet = buildZedSnippet(models, 8124, "claude-code") as {
+      language_models: { openai_compatible: Record<string, { api_url: string; available_models: Array<{ name: string; max_tokens: number }> }> };
+    };
+    const provider = snippet.language_models.openai_compatible["claude-code"]!;
+    assert.equal(provider.api_url, "http://127.0.0.1:8124/v1");
+    assert.equal(provider.available_models[0]!.max_tokens, 1_000_000);
+  });
+});
+
+describe("buildOpenCodeSnippet", () => {
+  it("builds the OpenCode v2 provider block", () => {
+    const snippet = buildOpenCodeSnippet(models, 8125, "claude-code-2") as {
+      providers: Record<string, {
+        name: string;
+        package: string;
+        settings: { baseURL: string; apiKey: string };
+        models: Record<string, { modelID: string; name: string; limit: { context: number; output: number } }>;
+      }>;
+    };
+    const provider = snippet.providers["claude-code-2"]!;
+    assert.equal(provider.name, "Claude (claude-code-2)");
+    assert.equal(provider.package, "@opencode/ai/providers/openai-compatible");
+    assert.equal(provider.settings.baseURL, "http://127.0.0.1:8125/v1");
+    assert.equal(provider.models["claude-opus-5-5"]!.modelID, "claude-opus-5-5");
+    assert.equal(provider.models["claude-opus-5-5-fast"]!.modelID, "claude-opus-5-5:fast");
+    assert.deepEqual(provider.models["claude-opus-5-5"]!.limit, { context: 1_000_000, output: 128_000 });
+  });
+});

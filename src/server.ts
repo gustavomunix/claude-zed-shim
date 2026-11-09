@@ -116,12 +116,18 @@ export function parseChatBody(raw: unknown): ChatBody {
 export interface ModelInfo {
   id: string;
   displayName?: string;
+  contextWindow?: number;
   maxTokens?: number;
 }
 
 export async function fetchModelCatalog(): Promise<ModelInfo[]> {
   await refreshModelsFromCli().catch(() => {});
-  return getClaudeModels().map((m) => ({ id: m.id, displayName: m.name, maxTokens: m.contextWindow }));
+  return getClaudeModels().map((m) => ({
+    id: m.id,
+    displayName: m.name,
+    contextWindow: m.contextWindow,
+    maxTokens: m.maxTokens,
+  }));
 }
 
 async function handleModels(res: ServerResponse): Promise<void> {

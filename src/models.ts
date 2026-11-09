@@ -11,6 +11,11 @@ export function isClaudeEffort(value: unknown): value is ClaudeEffort {
   return typeof value === "string" && (EFFORT_LEVELS as readonly string[]).includes(value);
 }
 
+export function defaultMaxTokens(id: string, catalogMax?: number): number {
+  if (catalogMax && catalogMax > 0) return catalogMax;
+  return id.toLowerCase().includes("claude") ? 200_000 : 1_000_000;
+}
+
 export type ClaudeModel = {
   id: string;
   name: string;
