@@ -1,8 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { modelsFromSdk, modelCachePath, invalidateModelsCache, getClaudeModels } from "../src/models.ts";
+import {
+  modelsFromSdk,
+  modelCachePath,
+  invalidateModelsCache,
+  getClaudeModels,
+  setDiscoveredModels,
+} from "../src/models.ts";
 
 describe("modelCachePath", () => {
   it("keeps legacy path when CLAUDE_CONFIG_DIR is unset", () => {
@@ -30,6 +37,27 @@ describe("modelCachePath", () => {
       assert.notEqual(withAcc2, withAcc3);
     } finally {
       if (previous !== undefined) process.env.CLAUDE_CONFIG_DIR = previous;
+    }
+  });
+
+  it("writes the model cache with private permissions", () => {
+    const previousXdg = process.env.XDG_DATA_HOME;
+    const previousCfg = process.env.CLAUDE_CONFIG_DIR;
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-models-"));
+    try {
+      process.env.XDG_DATA_HOME = dir;
+      delete process.env.CLAUDE_CONFIG_DIR;
+      setDiscoveredModels([
+        { id: "probe", name: "Probe", reasoning: false, contextWindow: 1, maxTokens: 1 },
+      ]);
+      assert.equal(statSync(modelCachePath()).mode & 0o777, 0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      if (previousXdg === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdg;
+      if (previousCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previousCfg;
+      invalidateModelsCache();
     }
   });
 });

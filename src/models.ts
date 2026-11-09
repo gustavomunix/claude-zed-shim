@@ -1,6 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { readJsonFile, writeJsonFileAtomic } from "./json-file.ts";
 import { listClaudeSupportedModels } from "./sdk.ts";
 import { configBucket } from "./store.ts";
 
@@ -142,21 +142,12 @@ export function invalidateModelsCache(): void {
 }
 
 function readCachedModels(): ClaudeModel[] | null {
-  try {
-    const parsed = JSON.parse(readFileSync(modelCachePath(), "utf8"));
-    return Array.isArray(parsed) && parsed.length ? (parsed as ClaudeModel[]) : null;
-  } catch {
-    return null;
-  }
+  const parsed = readJsonFile<ClaudeModel[]>(modelCachePath());
+  return Array.isArray(parsed) && parsed.length ? parsed : null;
 }
 
 function writeCachedModels(models: ClaudeModel[]): void {
-  try {
-    const file = modelCachePath();
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, JSON.stringify(models, null, 2));
-  } catch {
-  }
+  writeJsonFileAtomic(modelCachePath(), models);
 }
 
 export function isFastModelId(modelId: string): boolean {

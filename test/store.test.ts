@@ -1,6 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { conversationKey, storePath } from "../src/store.ts";
+import { mkdtempSync, mkdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import {
+  conversationKey,
+  getForeignSessionId,
+  getSessionTurns,
+  setForeignSessionId,
+  storePath,
+} from "../src/store.ts";
 
 describe("storePath", () => {
   it("keeps the legacy path when CLAUDE_CONFIG_DIR is unset", () => {
@@ -46,5 +55,41 @@ describe("conversationKey", () => {
   it("differs by model", () => {
     const msgs = [{ role: "user", content: "hello" }];
     assert.notEqual(conversationKey(msgs, "a"), conversationKey(msgs, "b"));
+  });
+});
+
+describe("session store persistence", () => {
+  const withTempData = (run: () => void) => {
+    const previousXdg = process.env.XDG_DATA_HOME;
+    const previousCfg = process.env.CLAUDE_CONFIG_DIR;
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-store-"));
+    try {
+      process.env.XDG_DATA_HOME = dir;
+      delete process.env.CLAUDE_CONFIG_DIR;
+      run();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+      if (previousXdg === undefined) delete process.env.XDG_DATA_HOME;
+      else process.env.XDG_DATA_HOME = previousXdg;
+      if (previousCfg === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previousCfg;
+    }
+  };
+
+  it("writes the sessions file with private permissions", () => {
+    withTempData(() => {
+      setForeignSessionId("k", "session-1");
+      assert.equal(getForeignSessionId("k"), "session-1");
+      assert.equal(statSync(storePath()).mode & 0o777, 0o600);
+    });
+  });
+
+  it("survives a corrupt sessions.json without throwing", () => {
+    withTempData(() => {
+      mkdirSync(dirname(storePath()), { recursive: true });
+      writeFileSync(storePath(), "{ broken");
+      assert.equal(getForeignSessionId("missing"), undefined);
+      assert.deepEqual(getSessionTurns("missing"), []);
+    });
   });
 });

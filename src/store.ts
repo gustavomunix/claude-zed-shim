@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
+import { readJsonFile, writeJsonFileAtomic } from "./json-file.ts";
 import { userHistoryFingerprints } from "./translate.ts";
 
 type HistoryMessage = { role?: string; content?: unknown };
@@ -50,22 +50,12 @@ function storePath(): string {
 export { storePath };
 
 function readStore(): Record<string, ClaudeSessionBinding> {
-  const path = storePath();
-  if (!existsSync(path)) return {};
-  try {
-    const parsed = JSON.parse(readFileSync(path, "utf8")) as Record<string, ClaudeSessionBinding>;
-    return parsed && typeof parsed === "object" ? parsed : {};
-  } catch {
-    return {};
-  }
+  const parsed = readJsonFile<Record<string, ClaudeSessionBinding>>(storePath());
+  return parsed && typeof parsed === "object" ? parsed : {};
 }
 
 function writeStore(store: Record<string, ClaudeSessionBinding>): void {
-  try {
-    mkdirSync(dirname(storePath()), { recursive: true });
-    writeFileSync(storePath(), JSON.stringify(store, null, 2));
-  } catch {
-  }
+  writeJsonFileAtomic(storePath(), store);
 }
 
 export function getForeignSessionId(conversationKeyValue: string): string | undefined {
