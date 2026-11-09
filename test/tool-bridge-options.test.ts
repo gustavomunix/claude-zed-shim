@@ -48,6 +48,36 @@ describe("withStringCoercion", () => {
       count: 3,
     });
   });
+
+  it("keeps coercion and unknown keys on the fallback schema", async () => {
+    let captured: { parse: (value: unknown) => unknown } | undefined;
+    const sdk = {
+      createSdkMcpServer: () => ({ instance: { server: {} } }),
+      tool: (_name: string, _description: string, shape: { parse: (value: unknown) => unknown }) => {
+        captured = shape;
+        return {};
+      },
+    };
+    await buildZedMcpServer(
+      [
+        {
+          type: "function",
+          function: {
+            name: "fallback",
+            parameters: {
+              type: "object",
+              properties: { count: { type: "number" }, bad: { type: "nope" } },
+            },
+          },
+        },
+      ],
+      new Map(),
+      () => {},
+      undefined,
+      sdk,
+    );
+    assert.deepEqual(captured!.parse({ count: "5", extra: 1 }), { count: 5, extra: 1 });
+  });
 });
 
 describe("describeZedTools", () => {

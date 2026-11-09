@@ -212,7 +212,7 @@ export async function buildZedMcpServer(
         try {
           shape = (z as unknown as { fromJSONSchema: (s: unknown) => { loose: () => unknown } }).fromJSONSchema(params).loose();
         } catch {
-          shape = jsonSchemaToZodShape(params);
+          shape = z.object(jsonSchemaToZodShape(params)).catchall(z.any());
         }
         shape = withStringCoercion(shape, params);
         return toolFactory(
