@@ -89,6 +89,48 @@ describe("planResume", () => {
     assert.equal(plan.resume, undefined);
   });
 
+  it("forks a rewind into another session", () => {
+    const plan = planResume({
+      turns: [
+        { count: 1, hash: "a", leafUuid: "l1", sessionId: "s0" },
+        { count: 2, hash: "b", leafUuid: "l2", sessionId: "s1" },
+      ],
+      prints: ["a"],
+      priorMessages: [msg("a")],
+      sessionId: "s1",
+      leafUuid: "l2",
+      probeFor: (id) => (id === "s0" ? probe({ chain: "clean", has: true, last: "l1" }) : probe({ chain: "clean", has: true, last: "l2" })),
+    });
+    assert.deepEqual(plan.forkAt, { sessionId: "s0", leafUuid: "l1" });
+  });
+
+  it("forks when the leaf is not the last entry", () => {
+    const plan = planResume({
+      turns: [
+        { count: 1, hash: "a", leafUuid: "l1", sessionId: "s1" },
+        { count: 2, hash: "b", leafUuid: "l2", sessionId: "s1" },
+      ],
+      prints: ["a"],
+      priorMessages: [msg("a")],
+      sessionId: "s1",
+      leafUuid: "l2",
+      probeFor: () => probe({ chain: "clean", has: true, last: "later" }),
+    });
+    assert.deepEqual(plan.forkAt, { sessionId: "s1", leafUuid: "l1" });
+  });
+
+  it("forks a latest resume with a branched binding leaf", () => {
+    const plan = planResume({
+      turns: [{ count: 1, hash: "a", leafUuid: "l1", sessionId: "s1" }],
+      prints: ["a", "b"],
+      priorMessages: [msg("a"), msg("b")],
+      sessionId: "s1",
+      leafUuid: "l1",
+      probeFor: () => probe({ chain: "branched", has: true, last: "l1" }),
+    });
+    assert.deepEqual(plan.forkAt, { sessionId: "s1", leafUuid: "l1" });
+  });
+
   it("resumes untracked sessions without transcript", () => {
     const plan = planResume({
       turns: [],

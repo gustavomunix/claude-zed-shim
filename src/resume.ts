@@ -19,6 +19,15 @@ export type ResumePlan = {
   reason: "no-session" | "missing-file" | "latest" | "rewind" | "rewind-no-leaf" | "diverged" | "untracked";
 };
 
+function branchFork(
+  probe: SessionFileProbe,
+  sessionId: string,
+  leafUuid: string | undefined,
+): { forkAt?: { sessionId: string; leafUuid: string } } {
+  if (!leafUuid || probe.chainAfterLeaf(leafUuid) !== "branched") return {};
+  return { forkAt: { sessionId, leafUuid } };
+}
+
 export function planResume(input: {
   turns: TurnBoundary[];
   prints: string[];
@@ -27,7 +36,7 @@ export function planResume(input: {
   leafUuid?: string;
   probeFor: (sessionId: string) => SessionFileProbe | null;
 }): ResumePlan {
-  const { turns, prints, priorMessages, sessionId, probeFor } = input;
+  const { turns, prints, priorMessages, sessionId, leafUuid, probeFor } = input;
 
   if (!sessionId) {
     return {
@@ -53,6 +62,7 @@ export function planResume(input: {
     const missedMessages = historyAfterUserCount(priorMessages, match.count);
     return {
       resume: sessionId,
+      ...branchFork(current, sessionId, leafUuid),
       missedMessages,
       transcript: missedMessages.length > 0 ? "missed" : "none",
       clearBinding: false,
@@ -63,6 +73,7 @@ export function planResume(input: {
   if (match.kind === "untracked") {
     return {
       resume: sessionId,
+      ...branchFork(current, sessionId, leafUuid),
       missedMessages: [],
       transcript: "none",
       clearBinding: false,
@@ -82,6 +93,7 @@ export function planResume(input: {
   if (!match.leafUuid) {
     return {
       resume: sessionId,
+      ...branchFork(current, sessionId, leafUuid),
       missedMessages: [],
       transcript: "none",
       clearBinding: false,
@@ -107,7 +119,9 @@ export function planResume(input: {
 
   return {
     resume: source,
-    ...(needsFork ? { forkAt: { sessionId: source, leafUuid: match.leafUuid } } : {}),
+    ...(needsFork
+      ? { forkAt: { sessionId: source, leafUuid: match.leafUuid } }
+      : branchFork(sourceProbe, source, leafUuid)),
     missedMessages: [],
     transcript: "none",
     clearBinding: false,
