@@ -9,14 +9,15 @@ const system = (text: string) => [
 
 describe("detectMetaRequestKind", () => {
   it("recognizes Zed title, summary and commit prompts", () => {
+    const user = (text: string) => [{ role: "user", content: text }];
     assert.equal(
-      detectMetaRequestKind(system("Generate a concise 3-7 word title for this conversation, omitting punctuation.")),
+      detectMetaRequestKind(user("Generate a concise 3-7 word title for this conversation, omitting punctuation.")),
       "title",
     );
-    assert.equal(detectMetaRequestKind(system("Summarize the conversation so far to free up context.")), "summary");
-    assert.equal(detectMetaRequestKind(system("Compact the conversation so far.")), "summary");
-    assert.equal(detectMetaRequestKind(system("You are an expert at writing Git commits.")), "commit");
-    assert.equal(detectMetaRequestKind(system("You are a coding agent.")), null);
+    assert.equal(detectMetaRequestKind(user("Summarize the conversation so far to free up context.")), "summary");
+    assert.equal(detectMetaRequestKind(user("Compact the conversation so far.")), "summary");
+    assert.equal(detectMetaRequestKind(user("You are an expert at writing Git commits.")), "commit");
+    assert.equal(detectMetaRequestKind(user("You are a coding agent.")), null);
   });
 
   it("recognizes markers in the last user message", () => {
@@ -34,11 +35,18 @@ describe("detectMetaRequestKind", () => {
     );
   });
 
-  it("ignores markers left in older history", () => {
+  it("ignores markers left in older history or project rules", () => {
     assert.equal(
       detectMetaRequestKind([
         { role: "user", content: "Generate a concise 3-7 word title for this conversation" },
         { role: "assistant", content: "A title" },
+        { role: "user", content: "normal follow-up" },
+      ]),
+      null,
+    );
+    assert.equal(
+      detectMetaRequestKind([
+        { role: "system", content: "You are an expert at writing Git commits." },
         { role: "user", content: "normal follow-up" },
       ]),
       null,
@@ -61,5 +69,13 @@ describe("detectMetaRequestKind", () => {
     assert.match(prompt, /first question/);
     assert.match(prompt, /first answer/);
     assert.match(prompt, /Generate a concise/);
+  });
+
+  it("keeps a trailing user turn before the instruction", () => {
+    const prompt = buildMetaPrompt("title", [
+      { role: "user", content: "now add tests" },
+      { role: "user", content: "Generate a concise 3-7 word title for this conversation" },
+    ]);
+    assert.match(prompt, /now add tests/);
   });
 });

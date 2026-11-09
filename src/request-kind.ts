@@ -1,9 +1,4 @@
-import {
-  buildConversationTranscript,
-  extractTextContent,
-  priorMessagesOf,
-  type HistoryMessage,
-} from "./translate.ts";
+import { buildConversationTranscript, extractTextContent, type HistoryMessage } from "./translate.ts";
 
 export type MetaRequestKind = "title" | "summary" | "commit" | null;
 
@@ -34,7 +29,7 @@ function latestUserText(messages: HistoryMessage[]): string {
 }
 
 export function detectMetaRequestKind(messages: HistoryMessage[]): MetaRequestKind {
-  const text = `${systemText(messages)}\n${latestUserText(messages)}`;
+  const text = latestUserText(messages);
   if (text.includes(TITLE_MARKER)) return "title";
   if (text.includes(COMMIT_MARKER)) return "commit";
   if (SUMMARY_MARKERS.some((marker) => text.includes(marker))) return "summary";
@@ -58,7 +53,7 @@ export function buildMetaPrompt(kind: Exclude<MetaRequestKind, null>, messages: 
   const history =
     kind === "commit"
       ? ""
-      : buildConversationTranscript(priorMessagesOf(messages).filter((message) => message.role !== "system")).trim();
+      : buildConversationTranscript(messages.slice(0, -1).filter((message) => message.role !== "system")).trim();
   const context = history ? `<conversation_history>\n${history}\n</conversation_history>\n\n` : "";
   return `<instructions>\n${instructions}\n</instructions>\n\n${context}${latestUserText(messages)}`;
 }
