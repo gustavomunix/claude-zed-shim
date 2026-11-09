@@ -30,6 +30,7 @@ import {
 import {
   acquireSpawnLock,
   clearAllBridges,
+  deleteBridge,
   findBridgeByConversation,
   findBridgeByPendingTool,
   parkedTurnTtlMs,
@@ -642,6 +643,7 @@ async function startNewTurn(input: {
     } finally {
       if (!handedOff) {
         handle?.close();
+        deleteBridge(bridgeId);
       }
     }
   }

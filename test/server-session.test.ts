@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mockHandle, startTestServer } from "./helpers/server.ts";
+import { findBridgeByConversation } from "../src/pool.ts";
 import { conversationKey, getSessionTurns } from "../src/store.ts";
 import { userHistoryFingerprints } from "../src/translate.ts";
 import { setClaudeQueryStarter, setClaudeSessionForker, type StartClaudeQueryParams } from "../src/sdk.ts";
@@ -38,6 +39,10 @@ describe("session resume", () => {
       const first = await post(testServer.port, [{ role: "user", content: "one" }]);
       assert.equal(first.status, 200);
       assert.equal(captured?.resume, undefined);
+      assert.equal(
+        findBridgeByConversation(conversationKey([{ role: "user", content: "one" }], "claude-opus-5-5")),
+        undefined,
+      );
 
       const project = join(testServer.configDir, "projects", "demo");
       mkdirSync(project, { recursive: true });
