@@ -26,10 +26,6 @@ function systemText(messages: HistoryMessage[]): string {
     .join("\n");
 }
 
-function allText(messages: HistoryMessage[]): string {
-  return messages.map((message) => extractTextContent(message.content)).join("\n");
-}
-
 function latestUserText(messages: HistoryMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
     if (messages[i]?.role === "user") return extractTextContent(messages[i]!.content).trim();
@@ -38,7 +34,7 @@ function latestUserText(messages: HistoryMessage[]): string {
 }
 
 export function detectMetaRequestKind(messages: HistoryMessage[]): MetaRequestKind {
-  const text = allText(messages);
+  const text = `${systemText(messages)}\n${latestUserText(messages)}`;
   if (text.includes(TITLE_MARKER)) return "title";
   if (text.includes(COMMIT_MARKER)) return "commit";
   if (SUMMARY_MARKERS.some((marker) => text.includes(marker))) return "summary";
@@ -47,13 +43,22 @@ export function detectMetaRequestKind(messages: HistoryMessage[]): MetaRequestKi
 
 const DEFAULT_TITLE_INSTRUCTIONS =
   "Create a concise 3-7 word title for the request below. Output only the title, with no quotation marks.";
+const DEFAULT_SUMMARY_INSTRUCTIONS =
+  "Summarize the conversation below. Return only the summary requested by the final message.";
 
 export function buildMetaPrompt(kind: Exclude<MetaRequestKind, null>, messages: HistoryMessage[]): string {
-  const system = systemText(messages).trim();
+  const system = kind === "summary" ? "" : systemText(messages).trim();
   const instructions =
-    system || (kind === "title" ? DEFAULT_TITLE_INSTRUCTIONS : "Follow the instructions in the request below.");
+    system ||
+    (kind === "title"
+      ? DEFAULT_TITLE_INSTRUCTIONS
+      : kind === "summary"
+        ? DEFAULT_SUMMARY_INSTRUCTIONS
+        : "Follow the instructions in the request below.");
   const history =
-    kind === "commit" ? "" : buildConversationTranscript(priorMessagesOf(messages)).trim();
+    kind === "commit"
+      ? ""
+      : buildConversationTranscript(priorMessagesOf(messages).filter((message) => message.role !== "system")).trim();
   const context = history ? `<conversation_history>\n${history}\n</conversation_history>\n\n` : "";
   return `<instructions>\n${instructions}\n</instructions>\n\n${context}${latestUserText(messages)}`;
 }

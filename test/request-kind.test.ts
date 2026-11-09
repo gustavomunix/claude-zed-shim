@@ -34,6 +34,17 @@ describe("detectMetaRequestKind", () => {
     );
   });
 
+  it("ignores markers left in older history", () => {
+    assert.equal(
+      detectMetaRequestKind([
+        { role: "user", content: "Generate a concise 3-7 word title for this conversation" },
+        { role: "assistant", content: "A title" },
+        { role: "user", content: "normal follow-up" },
+      ]),
+      null,
+    );
+  });
+
   it("builds an instructions prompt with the user request", () => {
     const prompt = buildMetaPrompt("commit", system("You are an expert at writing Git commits."));
     assert.match(prompt, /<instructions>/);
