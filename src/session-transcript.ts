@@ -7,7 +7,7 @@ export type LeafChainState = "clean" | "branched" | "missing";
 export function findClaudeSessionFile(sessionId: string, configDir?: string): string | null {
   const id = sessionId.trim();
   if (!id) return null;
-  const root = configDir?.trim() || join(homedir(), ".claude");
+  const root = configDir?.trim() || process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), ".claude");
   const projectsDir = join(root, "projects");
   let projectDirs: string[];
   try {

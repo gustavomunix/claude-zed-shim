@@ -27,13 +27,49 @@ describe("session transcript", () => {
       );
 
       assert.equal(findClaudeSessionFile("s1", dir), file);
-      assert.equal(sessionFileHasEntry(file, "a1"), true);
-      assert.equal(sessionFileHasEntry(file, "missing"), false);
-      assert.equal(sessionChainAfterLeaf(file, "u1"), "clean");
-      assert.equal(lastChainEntryUuid(file), "u2");
+      assert.equal(sessionFileHasEntry(file, "a1", 16), true);
+      assert.equal(sessionFileHasEntry(file, "missing", 16), false);
+      assert.equal(sessionChainAfterLeaf(file, "u1", 16), "clean");
+      assert.equal(lastChainEntryUuid(file, 16), "u2");
 
       appendFileSync(file, line({ type: "assistant", uuid: "side", parentUuid: "other" }));
-      assert.equal(sessionChainAfterLeaf(file, "u1"), "branched");
+      assert.equal(sessionChainAfterLeaf(file, "u1", 16), "branched");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses CLAUDE_CONFIG_DIR when no argument is given", () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-transcript-"));
+    const previous = process.env.CLAUDE_CONFIG_DIR;
+    try {
+      const project = join(dir, "projects", "demo");
+      mkdirSync(project, { recursive: true });
+      const file = join(project, "s1.jsonl");
+      writeFileSync(file, line({ type: "user", uuid: "u1", parentUuid: null }));
+      process.env.CLAUDE_CONFIG_DIR = dir;
+      assert.equal(findClaudeSessionFile("s1"), file);
+    } finally {
+      if (previous === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+      else process.env.CLAUDE_CONFIG_DIR = previous;
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("detects last-prompt branches and compact boundaries", () => {
+    const dir = mkdtempSync(join(tmpdir(), "claude-zed-transcript-"));
+    try {
+      const file = join(dir, "s1.jsonl");
+      writeFileSync(
+        file,
+        line({ type: "user", uuid: "u1", parentUuid: null }) +
+          line({ type: "assistant", uuid: "a1", parentUuid: "u1" }) +
+          line({ type: "last-prompt", leafUuid: "outside" }),
+      );
+      assert.equal(sessionChainAfterLeaf(file, "u1", 16), "branched");
+
+      appendFileSync(file, line({ type: "system", subtype: "compact_boundary", uuid: "c1" }));
+      assert.equal(lastChainEntryUuid(file, 16), "c1");
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
