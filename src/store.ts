@@ -127,28 +127,28 @@ export function rewindSessionTurns(conversationKeyValue: string, index: number):
 }
 
 export type HistoryMatch =
+  | { kind: "untracked" }
   | { kind: "latest"; count: number }
   | { kind: "rewind"; index: number; leafUuid?: string; sessionId?: string }
   | { kind: "diverged" };
 
 export function matchTurnHistory(turns: TurnBoundary[], prints: string[]): HistoryMatch {
-  if (turns.length === 0 || prints.length === 0) {
-    return { kind: "latest", count: Math.min(turns.length, prints.length) };
+  const latest = turns.at(-1);
+  if (!latest) return { kind: "untracked" };
+  const count = prints.length;
+  if (count >= latest.count && prints[latest.count - 1] === latest.hash) {
+    return { kind: "latest", count: latest.count };
   }
-  let matched = 0;
-  for (let i = 0; i < Math.min(turns.length, prints.length); i++) {
-    if (turns[i]!.hash === prints[i]) matched = i + 1;
-    else break;
+  for (let i = turns.length - 2; i >= 0; i--) {
+    const turn = turns[i]!;
+    if (turn.count === count && prints[count - 1] === turn.hash) {
+      return {
+        kind: "rewind",
+        index: i,
+        leafUuid: turn.leafUuid,
+        ...(turn.sessionId ? { sessionId: turn.sessionId } : {}),
+      };
+    }
   }
-  if (matched === prints.length && matched <= turns.length) {
-    return { kind: "latest", count: matched };
-  }
-  if (matched > 0 && matched < prints.length) {
-    const boundary = turns[matched - 1]!;
-    return { kind: "rewind", index: matched - 1, leafUuid: boundary.leafUuid, sessionId: boundary.sessionId };
-  }
-  if (matched === 0 && prints.length > 0) {
-    return { kind: "diverged" };
-  }
-  return { kind: "latest", count: matched };
+  return { kind: "diverged" };
 }
