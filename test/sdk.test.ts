@@ -19,6 +19,21 @@ describe("startClaudeQuery options", () => {
     assert.equal((captured.options?.settings as Record<string, unknown>)?.disableAllHooks, true);
   });
 
+  it("passes a supported effort level", async () => {
+    let captured: { options?: Record<string, unknown> } = {};
+    const handle = await startClaudeQuery({
+      prompt: "hi",
+      cwd: process.cwd(),
+      effort: "high",
+      queryImpl: () => (input: { options: Record<string, unknown> }) => {
+        captured = input;
+        return (async function* () {})();
+      },
+    });
+    handle.close();
+    assert.equal(captured.options?.effort, "high");
+  });
+
   it("lets explicit settingSources override isolateMcp", async () => {
     let captured: { options?: Record<string, unknown> } = {};
     const handle = await startClaudeQuery({

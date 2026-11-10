@@ -17,6 +17,17 @@ describe("buildZedSnippet", () => {
     assert.equal(provider.api_url, "http://127.0.0.1:8124/v1");
     assert.equal(provider.available_models[0]!.max_tokens, 1_000_000);
   });
+
+  it("exposes effort levels when the model supports them", () => {
+    const snippet = buildZedSnippet(
+      [{ id: "claude-opus-5-5", contextWindow: 1_000_000, efforts: ["low", "medium", "high", "max"] }],
+      8124,
+      "claude-code",
+    ) as { language_models: { openai_compatible: Record<string, { available_models: Array<Record<string, unknown>> }> } };
+    const model = snippet.language_models.openai_compatible["claude-code"]!.available_models[0]!;
+    assert.equal(model.reasoning_effort, "high");
+    assert.deepEqual(model.reasoning_effort_levels, ["low", "medium", "high", "max"]);
+  });
 });
 
 describe("buildOpenCodeSnippet", () => {

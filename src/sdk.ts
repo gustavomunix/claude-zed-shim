@@ -302,6 +302,10 @@ export async function startClaudeQuery(params: StartClaudeQueryParams): Promise<
     options.allowDangerouslySkipPermissions = true;
   }
 
+  if (params.effort && ["low", "medium", "high", "xhigh", "max"].includes(params.effort)) {
+    options.effort = params.effort;
+  }
+
   if (params.thinking) {
     options.thinking = params.thinking;
   }

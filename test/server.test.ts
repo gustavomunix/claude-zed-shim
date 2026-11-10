@@ -14,4 +14,8 @@ describe("parseChatBody", () => {
     assert.equal(b.model, "m");
     assert.equal(b.messages.length, 1);
   });
+  it("passes reasoning_effort through", () => {
+    const b = parseChatBody({ model: "m", messages: [{ role: "user", content: "hi" }], reasoning_effort: "high" });
+    assert.equal(b.reasoning_effort, "high");
+  });
 });

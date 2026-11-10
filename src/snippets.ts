@@ -41,6 +41,12 @@ export function buildZedSnippet(models: ModelInfo[], port: number, providerId: s
             name: model.id,
             display_name: model.displayName ?? model.id,
             max_tokens: defaultMaxTokens(model.id, model.contextWindow),
+            ...(model.efforts?.length
+              ? {
+                  reasoning_effort: model.efforts.includes("high") ? "high" : model.efforts.at(-1),
+                  reasoning_effort_levels: model.efforts,
+                }
+              : {}),
           })),
         },
       },

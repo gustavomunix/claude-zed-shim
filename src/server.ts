@@ -119,6 +119,7 @@ export type ChatBody = {
   tools: ZedOpenAITool[];
   stream: boolean;
   temperature?: number;
+  reasoning_effort?: string;
 };
 
 export function parseChatBody(raw: unknown): ChatBody {
@@ -132,6 +133,7 @@ export function parseChatBody(raw: unknown): ChatBody {
     tools: Array.isArray(body.tools) ? (body.tools as ZedOpenAITool[]) : [],
     stream: body.stream !== false,
     ...(typeof body.temperature === "number" ? { temperature: body.temperature } : {}),
+    ...(typeof body.reasoning_effort === "string" ? { reasoning_effort: body.reasoning_effort } : {}),
   };
 }
 
@@ -140,6 +142,7 @@ export interface ModelInfo {
   displayName?: string;
   contextWindow?: number;
   maxTokens?: number;
+  efforts?: string[];
 }
 
 export async function fetchModelCatalog(): Promise<ModelInfo[]> {
@@ -149,6 +152,7 @@ export async function fetchModelCatalog(): Promise<ModelInfo[]> {
     displayName: m.name,
     contextWindow: m.contextWindow,
     maxTokens: m.maxTokens,
+    efforts: m.efforts,
   }));
 }
 
@@ -552,6 +556,7 @@ async function startNewTurn(input: {
         autoCompactEnabled: !isMeta,
         isolateMcp: true,
         settingSources: isMeta ? [] : ["project"],
+        effort: isMeta ? undefined : body.reasoning_effort,
         skills: isMeta ? [] : undefined,
         persistSession: isMeta ? false : undefined,
         maxTurns: isMeta ? 1 : undefined,
