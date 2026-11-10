@@ -53,8 +53,11 @@ The `models` snippet includes `reasoning_effort` and `reasoning_effort_levels` f
 ### Restart
 
 ```sh
-sh scripts/restart-mac.sh restart
-sh scripts/restart-mac.sh status
+sh scripts/macos/shim.sh start
+sh scripts/macos/shim.sh stop
+sh scripts/macos/shim.sh restart
+sh scripts/macos/shim.sh status
+sh scripts/macos/shim.sh logs
 ```
 
 With the dotfile helper, from any directory:
@@ -64,7 +67,7 @@ claude-shim restart
 claude-shim status
 ```
 
-The script uses `launchctl` when the per-port LaunchAgent exists; otherwise it kills the listener and starts a background process with logs in `/tmp/claude-zed-<port>.log`.
+The script uses `launchctl` when the per-port LaunchAgent exists; otherwise it starts a background process with logs in `/tmp/claude-zed-<port>.log`.
 
 ### Windows background
 
@@ -146,11 +149,11 @@ Both installers install dependencies, build, and can self-register the shim:
 .\scripts\install.ps1 -Startup -Port 8125 -ConfigDir "$HOME\.claude-account2" -ProviderId claude-code-work
 ```
 
-- **macOS** — `scripts/install-mac.sh` (`PORT`, `CONFIG_DIR`, `PROVIDER_ID` env vars; launchd `LaunchAgent` with `KeepAlive`). The label is `dev.claude-zed-shim-<port>`, so each account has its own job. Logs go to `~/Library/Logs/claude-zed-shim/<port>/`. `PORT=8125 sh scripts/install-mac.sh uninstall` removes only that instance; port 8124 also migrates the old label. `DRY_RUN=1` prints the plist without installing.
+- **macOS** — `scripts/macos/install.sh` (`PORT`, `CONFIG_DIR`, `PROVIDER_ID` env vars; launchd `LaunchAgent` with `KeepAlive`). The label is `dev.claude-zed-shim-<port>`, so each account has its own job. Logs go to `~/Library/Logs/claude-zed-shim/<port>/`. `PORT=8125 sh scripts/macos/install.sh uninstall` removes only that instance; port 8124 also migrates the old label. `DRY_RUN=1` prints the plist without installing.
 
 ```sh
-PORT=8124 PROVIDER_ID=claude-code-personal sh scripts/install-mac.sh
-CONFIG_DIR="$HOME/.claude-account2" PORT=8125 PROVIDER_ID=claude-code-work sh scripts/install-mac.sh
+PORT=8124 PROVIDER_ID=claude-code-personal sh scripts/macos/install.sh
+CONFIG_DIR="$HOME/.claude-account2" PORT=8125 PROVIDER_ID=claude-code-work sh scripts/macos/install.sh
 ```
 
 For a second account, log it in first (see "Two accounts"), then install its instance with the matching `CONFIG_DIR`.
