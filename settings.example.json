@@ -16,7 +16,15 @@
               "chat_completions": true,
               "interleaved_reasoning": false,
               "max_tokens_parameter": false
-            }
+            },
+            "reasoning_effort": "high",
+            "reasoning_effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
           },
           {
             "name": "claude-sonnet-5-5",
@@ -30,7 +38,15 @@
               "chat_completions": true,
               "interleaved_reasoning": false,
               "max_tokens_parameter": false
-            }
+            },
+            "reasoning_effort": "high",
+            "reasoning_effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
           }
         ]
       },
@@ -49,7 +65,15 @@
               "chat_completions": true,
               "interleaved_reasoning": false,
               "max_tokens_parameter": false
-            }
+            },
+            "reasoning_effort": "high",
+            "reasoning_effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
           },
           {
             "name": "claude-sonnet-5-5",
@@ -63,7 +87,15 @@
               "chat_completions": true,
               "interleaved_reasoning": false,
               "max_tokens_parameter": false
-            }
+            },
+            "reasoning_effort": "high",
+            "reasoning_effort_levels": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ]
           }
         ]
       }

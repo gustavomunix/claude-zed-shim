@@ -35,6 +35,8 @@ Paste the snippet into Zed `settings.json` (`zed: open settings`), merging the `
 
 Zed requires a non-empty API key for `openai_compatible`: use any dummy value (agent Settings or `CLAUDE_CODE_API_KEY=dummy`). The shim ignores it.
 
+The `models` snippet includes `reasoning_effort` and `reasoning_effort_levels` for models that support effort. Zed sends `reasoning_effort`; the shim forwards it to Claude Code.
+
 ## Commands
 
 | Command           | What it does                              |
