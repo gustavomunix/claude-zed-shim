@@ -50,6 +50,22 @@ The `models` snippet includes `reasoning_effort` and `reasoning_effort_levels` f
 | `npm run typecheck` | `tsc --noEmit`                          |
 | `npm run verify`  | Typecheck + tests + build                 |
 
+### Restart
+
+```sh
+sh scripts/restart-mac.sh restart
+sh scripts/restart-mac.sh status
+```
+
+With the dotfile helper, from any directory:
+
+```sh
+claude-shim restart
+claude-shim status
+```
+
+The script uses `launchctl` when the per-port LaunchAgent exists; otherwise it kills the listener and starts a background process with logs in `/tmp/claude-zed-<port>.log`.
+
 ### Windows background
 
 - `start-windows.cmd`: minimized console on port 8124 (builds first run). Reads `CLAUDE_ZED_SHIM_PORT` to override.
