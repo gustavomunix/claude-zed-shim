@@ -35,7 +35,30 @@ Paste the snippet into Zed `settings.json` (`zed: open settings`), merging the `
 
 Zed requires a non-empty API key for `openai_compatible`: use any dummy value (agent Settings or `CLAUDE_CODE_API_KEY=dummy`). The shim ignores it.
 
-The `models` snippet includes `reasoning_effort` and `reasoning_effort_levels` for models that support effort. Zed sends `reasoning_effort`; the shim forwards it to Claude Code.
+## Reasoning effort
+
+Each model's levels come from the Agent SDK catalog (`supportedModels()` → `supportedEffortLevels`). The `models` snippet writes them as `reasoning_effort_levels` with `reasoning_effort: "high"` as the default, so Zed shows an effort selector. Models without effort support (e.g. `claude-haiku-4-5-20251001`) get neither field.
+
+On each request the shim reads `reasoning_effort`:
+
+| Value from Zed | What Claude Code gets |
+| --- | --- |
+| `low`, `medium`, `high`, `xhigh`, `max` | Passed as the SDK `effort` option, unchanged |
+| `minimal`, any other value, or none | No `effort` option: Claude Code uses its own default (`effortLevel` in that account's Claude settings, else the model default) |
+
+The shim does not clamp a level against the model's list: a level the model lacks (e.g. `xhigh` on `claude-sonnet-4-6`) is still sent, and Claude Code decides how to run it. Title and summary requests from Zed never carry an effort.
+
+## Images and files
+
+User messages accept OpenAI and Anthropic-style parts: `image_url` (data URL or `http(s)` URL), `image` (base64, `source`, or URL), `input_image`, `file` / `input_file` (`file_data`, `data`, `url`), and `document`. Images become Anthropic `image` blocks, PDFs become `document` blocks. Remote `http(s)` URLs are passed as URL sources; Claude fetches them.
+
+Tool results can carry media too, in any of the shapes clients use:
+
+- parts array in the `tool` message content;
+- the same array JSON-encoded as a string (`"[{\"type\":\"image_url\",...}]"`);
+- media promoted to a `user` message right after the tool messages (plain `Attached media from tool result:` text or no text). The shim attaches it to the step's last tool result instead of treating it as a new user turn.
+
+If the parked turn that made the tool calls is gone (shim restart, TTL), the next request relays the tool results and their media to Claude in a new prompt, and Claude continues from there.
 
 ## Commands
 

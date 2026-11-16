@@ -39,6 +39,11 @@ CLAUDE_CONFIG_DIR="$HOME/.claude-account2" node dist/cli.js serve --port 8125 --
 | OpenCode snippet | `node dist/cli.js models --port 8125 --provider-id claude-code-2 --format opencode` | `providers.claude-code-2` |
 | Stream usage | `curl -N` chat request with `stream: true` | final chunk has `finish_reason` and `usage` |
 | Tool call | Zed read/glob | response continues after tool result |
+| User image | Zed: paste an image, ask its color | correct color |
+| User PDF | chat with a `file` part (`file_data` = PDF data URL) | model quotes the PDF text |
+| Tool media | tool result with an `image_url` part, as array and as JSON string | model describes the image |
+| Parallel tool media | two tool calls in one step, first result has an image | answer uses both results |
+| Effort | Zed effort selector, or `reasoning_effort` in the request | `low`…`max` reach the SDK; `minimal` falls back to the Claude Code default |
 | CLAUDE.md | repo with marker text | model sees marker |
 | Meta | Zed generate commit message | no new `sessions.json` binding |
 | LaunchAgent A | `launchctl print gui/$(id -u)/dev.claude-zed-shim-8124` | exists |
