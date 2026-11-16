@@ -139,6 +139,18 @@ Merge the printed `providers.claude-luciana` object into `~/.config/opencode/ope
 
 `models` is filled by the command with the live catalog. The shim ignores the API key. Two shim instances also work: run a second process with another port/config dir and add a second `providers` entry.
 
+### Usage (macOS)
+
+Subscription limits (5h session and weekly) for both accounts, same data as `/usage` inside Claude Code:
+
+```sh
+sh scripts/macos/usage.sh
+```
+
+It runs `claude -p "/usage"` once per account and prints the three limit lines. Account 1 uses Claude's default config (no `CLAUDE_CONFIG_DIR`), account 2 to `~/.claude-account2`; override with `CLAUDE_ZED_CONFIG_A` / `CLAUDE_ZED_CONFIG_B`. For the full report, run `CLAUDE_CONFIG_DIR="$HOME/.claude-account2" claude -p "/usage"`.
+
+Per-turn token counts are separate: start the shim with `CLAUDE_ZED_DEBUG=1` and read the `usage` lines in its log.
+
 ## Installers
 
 Both installers install dependencies, build, and can self-register the shim:
