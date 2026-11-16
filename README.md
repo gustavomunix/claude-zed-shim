@@ -139,16 +139,16 @@ Model list and auth always follow the `CLAUDE_CONFIG_DIR` of the server process;
 OpenCode's native Claude provider can keep account 1. Point the shim at account 2 and add its provider block:
 
 ```sh
-node dist/cli.js models --port 8125 --provider-id claude-luciana --format opencode
+node dist/cli.js models --port 8125 --provider-id claude-code-2 --format opencode
 ```
 
-Merge the printed `providers.claude-luciana` object into `~/.config/opencode/opencode.jsonc`. The shape is:
+Merge the printed `providers.claude-code-2` object into `~/.config/opencode/opencode.jsonc`. The shape is:
 
 ```json
 {
   "providers": {
-    "claude-luciana": {
-      "name": "Claude (claude-luciana)",
+    "claude-code-2": {
+      "name": "Claude (claude-code-2)",
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "http://127.0.0.1:8125/v1",

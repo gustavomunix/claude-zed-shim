@@ -119,8 +119,8 @@ OpenCode v2:
 ```json
 {
   "providers": {
-    "claude-luciana": {
-      "name": "Claude (Luciana)",
+    "claude-code-2": {
+      "name": "Claude (account 2)",
       "package": "@opencode/ai/providers/openai-compatible",
       "settings": {
         "baseURL": "http://127.0.0.1:8125/v1",

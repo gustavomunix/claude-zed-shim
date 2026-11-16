@@ -4,8 +4,8 @@
 # Usage:
 #   .\scripts\install.ps1                          # install deps + build (no startup)
 #   .\scripts\install.ps1 -Startup                 # same, registered at password-on
-#   .\scripts\install.ps1 -Startup -Port 8125 -ConfigDir "$HOME\.claude-account2" -ProviderId claude-code-luciana
-#   .\scripts\install.ps1 -Startup -Port 8124 -ProviderId claude-code-mletras
+#   .\scripts\install.ps1 -Startup -Port 8125 -ConfigDir "$HOME\.claude-account2" -ProviderId claude-code-2
+#   .\scripts\install.ps1 -Startup -Port 8124 -ProviderId claude-code
 #   .\scripts\install.ps1 -Uninstall -Port 8125
 param(
     [int]$Port = 8124,

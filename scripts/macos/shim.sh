@@ -4,10 +4,10 @@ set -eu
 root=$(cd "$(dirname "$0")/../.." && pwd)
 command=${1:-status}
 port_a=${CLAUDE_ZED_PORT_A:-8124}
-provider_a=${CLAUDE_ZED_PROVIDER_A:-claude-mletras}
+provider_a=${CLAUDE_ZED_PROVIDER_A:-claude-code}
 config_a=${CLAUDE_ZED_CONFIG_A:-}
 port_b=${CLAUDE_ZED_PORT_B:-8125}
-provider_b=${CLAUDE_ZED_PROVIDER_B:-claude-luciana}
+provider_b=${CLAUDE_ZED_PROVIDER_B:-claude-code-2}
 config_b=${CLAUDE_ZED_CONFIG_B:-$HOME/.claude-account2}
 domain="gui/$(id -u)"
 
