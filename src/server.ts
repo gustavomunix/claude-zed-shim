@@ -12,6 +12,9 @@ import {
   type ZedOpenAITool,
 } from "./tool-bridge.ts";
 import {
+  answeredToolStepIndex,
+  answeredToolStepPrompt,
+  attachPromotedToolMedia,
   buildConversationTranscript,
   classifyClaudeFailure,
   decodeToolMessageContent,
@@ -22,6 +25,7 @@ import {
   openAIError,
   openaiToolResultToMcpContent,
   priorMessagesOf,
+  promptAsStream,
   usageFromAnthropic,
   usageFromSdkResult,
   userHistoryFingerprints,
@@ -339,6 +343,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
     meta: metaKind,
   });
   const toolResults = metaKind ? new Map<string, McpToolResultContent[]>() : collectToolResults(messages);
+  if (!metaKind) attachPromotedToolMedia(messages, toolResults);
 
   // Resume parked bridge
   let existing = metaKind ? undefined : findBridgeByConversation(key);
@@ -453,8 +458,13 @@ async function startNewTurn(input: {
   };
 
   const openCodeTools = isMeta ? [] : body.tools;
-  let prompt: string | SdkUserPrompt = isMeta ? buildMetaPrompt(metaKind!, messages) : latestUserPrompt(messages);
-  const priorMessages = priorMessagesOf(messages);
+  const answeredStep = isMeta ? null : answeredToolStepIndex(messages);
+  let prompt: string | SdkUserPrompt = isMeta
+    ? buildMetaPrompt(metaKind!, messages)
+    : answeredStep !== null
+      ? answeredToolStepPrompt(messages, answeredStep)
+      : latestUserPrompt(messages);
+  const priorMessages = answeredStep !== null ? messages.slice(0, answeredStep) : priorMessagesOf(messages);
   const promptEmpty = typeof prompt === "string" ? prompt.length === 0 : false;
   if (promptEmpty && openCodeTools.length === 0) {
     sendError(res, 400, "No user message found");
@@ -547,7 +557,7 @@ async function startNewTurn(input: {
   try {
     handle = withGracefulStop(
       await getClaudeQueryStarter()({
-        prompt: claudePrompt as string | AsyncIterable<unknown>,
+        prompt: typeof claudePrompt === "string" ? claudePrompt : promptAsStream(claudePrompt),
         cwd,
         model,
         resume: isMeta ? undefined : resume,

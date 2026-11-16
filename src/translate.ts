@@ -12,6 +12,20 @@ export type SdkUserPrompt = {
   parent_tool_use_id: null;
 };
 
+export async function* promptAsStream(
+  prompt: string | SdkUserPrompt,
+): AsyncGenerator<SdkUserPrompt, void, unknown> {
+  if (typeof prompt === "string") {
+    yield {
+      type: "user",
+      message: { role: "user", content: prompt },
+      parent_tool_use_id: null,
+    };
+    return;
+  }
+  yield prompt;
+}
+
 export type McpToolResultContent =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string }
@@ -95,12 +109,187 @@ function convertPart(part: unknown, blocks: AnthropicContentBlock[]): void {
     if (isHttpUrl(url)) pushRemoteUrl(blocks, url);
     return;
   }
-  if (type === "image" || type === "input_image") {
-    const image = (p as { image?: unknown }).image;
+  if (type === "image") {
+    const mediaType =
+      typeof p.media_type === "string"
+        ? p.media_type
+        : typeof p.mimeType === "string"
+          ? p.mimeType
+          : typeof p.mime === "string"
+            ? p.mime
+            : "image/png";
+    const source = p.source;
+    if (source && typeof source === "object") {
+      const s = source as Record<string, unknown>;
+      if (s.type === "base64" && typeof s.data === "string") {
+        blocks.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: typeof s.media_type === "string" ? s.media_type : mediaType,
+            data: s.data,
+          },
+        });
+        return;
+      }
+      if (s.type === "url" && typeof s.url === "string") {
+        if (pushDataUrl(blocks, s.url)) return;
+        if (isHttpUrl(s.url)) pushRemoteUrl(blocks, s.url, mediaType);
+        return;
+      }
+    }
+    const image = p.image;
     if (typeof image === "string") {
       if (pushDataUrl(blocks, image)) return;
-      if (isHttpUrl(image)) pushRemoteUrl(blocks, image);
+      if (isHttpUrl(image)) {
+        pushRemoteUrl(blocks, image, mediaType);
+        return;
+      }
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data: image },
+      });
       return;
+    }
+    if (image instanceof URL) {
+      const href = image.toString();
+      if (pushDataUrl(blocks, href)) return;
+      if (isHttpUrl(href)) pushRemoteUrl(blocks, href, mediaType);
+      return;
+    }
+    if (image && typeof image === "object" && "url" in image) {
+      const url = (image as { url?: unknown }).url;
+      if (typeof url === "string") {
+        if (pushDataUrl(blocks, url)) return;
+        if (isHttpUrl(url)) pushRemoteUrl(blocks, url, mediaType);
+      }
+    }
+    return;
+  }
+  if (type === "document") {
+    const mediaType =
+      typeof p.media_type === "string"
+        ? p.media_type
+        : typeof p.mimeType === "string"
+          ? p.mimeType
+          : "application/pdf";
+    const source = p.source;
+    if (source && typeof source === "object") {
+      const s = source as Record<string, unknown>;
+      if (s.type === "base64" && typeof s.data === "string") {
+        blocks.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: typeof s.media_type === "string" ? s.media_type : mediaType,
+            data: s.data,
+          },
+        });
+        return;
+      }
+      if (s.type === "url" && typeof s.url === "string") {
+        if (pushDataUrl(blocks, s.url)) return;
+        if (isHttpUrl(s.url)) pushRemoteUrl(blocks, s.url, mediaType);
+        return;
+      }
+    }
+    const data = typeof p.data === "string" ? p.data : null;
+    if (data) {
+      if (/^data:/i.test(data)) {
+        pushDataUrl(blocks, data);
+        return;
+      }
+      blocks.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: mediaLooksLikePdf(mediaType) ? "application/pdf" : mediaType,
+          data,
+        },
+      });
+    }
+    return;
+  }
+  if (type === "input_image") {
+    const url = typeof p.image_url === "string" ? p.image_url : null;
+    const b64 = typeof p.data === "string" ? p.data : null;
+    const mediaType = typeof p.media_type === "string" ? p.media_type : "image/png";
+    if (url) {
+      if (pushDataUrl(blocks, url)) return;
+      if (isHttpUrl(url)) pushRemoteUrl(blocks, url, mediaType);
+      return;
+    }
+    if (b64) {
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data: b64 },
+      });
+    }
+    return;
+  }
+  if (type === "file" || type === "input_file") {
+    const file = (p.file && typeof p.file === "object" ? p.file : p) as Record<string, unknown>;
+    const fileData = typeof file.file_data === "string" ? file.file_data : null;
+    const url =
+      typeof file.url === "string"
+        ? file.url
+        : typeof file.uri === "string"
+          ? file.uri
+          : fileData && /^data:/i.test(fileData)
+            ? fileData
+            : null;
+    const data =
+      typeof file.data === "string"
+        ? file.data
+        : fileData && !/^data:/i.test(fileData)
+          ? fileData
+          : null;
+    const name =
+      typeof file.filename === "string"
+        ? file.filename
+        : typeof p.filename === "string"
+          ? p.filename
+          : "";
+    const mediaType =
+      typeof file.media_type === "string"
+        ? file.media_type
+        : typeof file.mime_type === "string"
+          ? file.mime_type
+          : typeof file.mime === "string"
+            ? file.mime
+            : mediaLooksLikePdf("", name)
+              ? "application/pdf"
+              : "application/octet-stream";
+
+    if (url) {
+      if (pushDataUrl(blocks, url)) return;
+      if (isHttpUrl(url)) {
+        pushRemoteUrl(blocks, url, mediaType);
+        return;
+      }
+      pushText(blocks, `[Attachment ${name || url} could not be relayed inline]`);
+      return;
+    }
+    if (data) {
+      if (/^data:/i.test(data)) {
+        pushDataUrl(blocks, data);
+        return;
+      }
+      if (mediaLooksLikeImage(mediaType)) {
+        blocks.push({
+          type: "image",
+          source: { type: "base64", media_type: mediaType, data },
+        });
+      } else {
+        blocks.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: mediaLooksLikePdf(mediaType, name) ? "application/pdf" : mediaType,
+            data,
+          },
+        });
+      }
     }
   }
 }
@@ -284,13 +473,25 @@ export function withLeadingText(prompt: string | SdkUserPrompt, text: string): s
   return { ...prompt, message: { role: "user", content: [{ type: "text", text }, ...content] } };
 }
 
+export const SYNTHETIC_TOOL_MEDIA_PROMPT = "Attached media from tool result:";
+
+export function isSyntheticToolMediaMessage(
+  msg: { role?: string; content?: unknown },
+  previous?: { role?: string; content?: unknown },
+): boolean {
+  if (msg?.role !== "user") return false;
+  const text = extractTextContent(msg.content).trim();
+  if (text === SYNTHETIC_TOOL_MEDIA_PROMPT) return true;
+  return !text && previous?.role === "tool" && contentHasAttachments(msg.content);
+}
+
 const SYSTEM_REMINDER_BLOCK = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
 
 function fingerprintedUserMessages(messages: HistoryMessage[]): Array<{ index: number; print: string }> {
   const entries: Array<{ index: number; print: string }> = [];
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    if (msg?.role !== "user") continue;
+    if (msg?.role !== "user" || isSyntheticToolMediaMessage(msg, messages[i - 1])) continue;
     const text = extractTextContent(msg.content).replace(SYSTEM_REMINDER_BLOCK, " ").replace(/\s+/g, " ").trim();
     const identity = text || (contentHasAttachments(msg.content) ? "\u0000attachments" : "");
     if (!identity) continue;
@@ -331,8 +532,179 @@ export function openaiToolResultToMcpContent(content: unknown): McpToolResultCon
   return result;
 }
 
+const TOOL_PART_TYPES = new Set([
+  "text",
+  "file",
+  "image",
+  "image_url",
+  "input_file",
+  "input_image",
+  "document",
+]);
+
 export function decodeToolMessageContent(content: unknown): unknown {
-  return content;
+  if (Array.isArray(content) && content.length === 1) {
+    const only = content[0] as { type?: unknown; text?: unknown } | null;
+    if (only?.type === "text" && typeof only.text === "string") {
+      const decoded = decodeToolMessageContent(only.text);
+      return decoded === only.text ? content : decoded;
+    }
+  }
+  if (typeof content !== "string") return content;
+  const text = content.trim();
+  if (!text.startsWith("[") || !text.endsWith("]")) return content;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return content;
+  }
+  if (!Array.isArray(parsed) || parsed.length === 0) return content;
+  const isPart = (part: unknown): boolean => {
+    if (!part || typeof part !== "object") return false;
+    const p = part as Record<string, unknown>;
+    if (typeof p.type !== "string" || !TOOL_PART_TYPES.has(p.type)) return false;
+    return p.type !== "text" || typeof p.text === "string";
+  };
+  return parsed.every(isPart) ? parsed : content;
+}
+
+export function attachPromotedToolMedia(
+  messages: HistoryMessage[],
+  toolResults: Map<string, McpToolResultContent[]>,
+): number {
+  let lastAssistant = -1;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant") {
+      lastAssistant = i;
+      break;
+    }
+  }
+  const step = messages.slice(lastAssistant + 1);
+  const media = step
+    .filter((msg, index) =>
+      isSyntheticToolMediaMessage(msg, step[index - 1] ?? messages[lastAssistant]),
+    )
+    .flatMap((msg) =>
+      openaiToolResultToMcpContent(msg.content).filter(
+        (block) => block.type !== "text",
+      ),
+    );
+  if (media.length === 0) return 0;
+  const stepToolIds = step
+    .filter((msg) => msg.role === "tool" && msg.tool_call_id)
+    .map((msg) => msg.tool_call_id!)
+    .filter((id) => toolResults.has(id));
+  const target = stepToolIds.at(-1);
+  if (!target) return 0;
+  const result = toolResults.get(target)!;
+  if (stepToolIds.length > 1) {
+    result.push({
+      type: "text",
+      text: "Media attached to the tool results of this step:",
+    });
+  }
+  result.push(...media);
+  return media.length;
+}
+
+export type ToolStepMessage = {
+  role?: string;
+  content?: unknown;
+  tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+  tool_call_id?: string;
+  name?: string;
+};
+
+export function answeredToolStepIndex(messages: ToolStepMessage[]): number | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg?.role !== "assistant") continue;
+    const ids = new Set(
+      (msg.tool_calls ?? []).map((call) => call?.id).filter(Boolean),
+    );
+    if (ids.size === 0) return null;
+    const answered = messages
+      .slice(i + 1)
+      .some((m) => m?.role === "tool" && !!m.tool_call_id && ids.has(m.tool_call_id));
+    return answered ? i : null;
+  }
+  return null;
+}
+
+const HOST_STOP_NOTE =
+  "If your session shows these calls as rejected, or the request as interrupted by the user, that came from the shim (a restart, or a wait that timed out), not from the user: nobody asked you to stop.";
+
+function toolStepBlocks(
+  messages: ToolStepMessage[],
+  assistantIndex: number,
+): { blocks: AnthropicContentBlock[]; userBlocks: AnthropicContentBlock[] } {
+  const assistant = messages[assistantIndex]!;
+  const blocks: AnthropicContentBlock[] = [];
+  const stepText = extractTextContent(assistant.content).trim();
+  if (stepText) {
+    blocks.push({ type: "text", text: `Your message in that step:\n${stepText}` });
+  }
+  const calls = new Map(
+    (assistant.tool_calls ?? []).map((call) => [call?.id, call?.function]),
+  );
+  const userBlocks: AnthropicContentBlock[] = [];
+  const stepMessages = messages.slice(assistantIndex + 1);
+  for (const [index, msg] of stepMessages.entries()) {
+    if (msg?.role === "tool" && msg.tool_call_id) {
+      const call = calls.get(msg.tool_call_id);
+      const result = openaiContentToAnthropicBlocks(decodeToolMessageContent(msg.content));
+      blocks.push(
+        {
+          type: "text",
+          text: `Result of ${call?.name ?? msg.name ?? "tool"} ${call?.arguments ?? ""} (${msg.tool_call_id}):`,
+        },
+        ...(result.length > 0 ? result : [{ type: "text" as const, text: "(no output)" }]),
+      );
+    } else if (msg && isSyntheticToolMediaMessage(msg, stepMessages[index - 1] ?? messages[assistantIndex])) {
+      blocks.push(
+        { type: "text", text: "Media attached to these tool results:" },
+        ...openaiContentToAnthropicBlocks(msg.content).filter(
+          (b) => !(b.type === "text" && b.text.trim() === SYNTHETIC_TOOL_MEDIA_PROMPT),
+        ),
+      );
+    } else if (msg?.role === "user") {
+      userBlocks.push(...openaiContentToAnthropicBlocks(msg.content));
+    }
+  }
+  return { blocks, userBlocks };
+}
+
+export function answeredToolStepPrompt(
+  messages: ToolStepMessage[],
+  assistantIndex: number,
+  options: { otherModel?: boolean } = {},
+): SdkUserPrompt {
+  const { blocks, userBlocks } = toolStepBlocks(messages, assistantIndex);
+  const content: AnthropicContentBlock[] = [
+    {
+      type: "text",
+      text: options.otherModel
+        ? "<tool_results>\nThe model that handled the turns above called the tools below as its last step. Their results are relayed here. Do not repeat a call unless its result requires it."
+        : "<tool_results>\nYour previous step called the tools below, but the session that made those calls ended before the client returned their results. They are relayed here. Do not repeat a call unless its result requires it.",
+    },
+    ...blocks,
+    {
+      type: "text",
+      text:
+        userBlocks.length > 0
+          ? "</tool_results>\n\nThe user sent the following after those calls. Respond to it with the results in mind:"
+          : options.otherModel
+            ? "</tool_results>\n\nContinue the task from these results."
+            : `</tool_results>\n\n${HOST_STOP_NOTE} Continue the task from these results.`,
+    },
+    ...userBlocks,
+  ];
+  return {
+    type: "user",
+    message: { role: "user", content },
+    parent_tool_use_id: null,
+  };
 }
 
 // --- OpenAI chunk builders (Zed-compatible shapes) ---
