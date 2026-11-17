@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mockHandle, startTestServer } from "./helpers/server.ts";
+import { mockHandle, promptText, startTestServer } from "./helpers/server.ts";
 import { conversationKey, getForeignSessionId } from "../src/store.ts";
 import { isNarrationSignature } from "../src/server.ts";
 import { setClaudeQueryStarter, type StartClaudeQueryParams } from "../src/sdk.ts";
@@ -144,7 +144,7 @@ describe("usage protocol", () => {
       assert.deepEqual(captured?.tools, []);
       assert.equal(captured?.resume, undefined);
       assert.match(String(captured?.systemPrompt), /text generation helper/);
-      assert.match(String(captured?.prompt), /diff --git/);
+      assert.match(await promptText(captured?.prompt), /diff --git/);
       assert.equal(getForeignSessionId(conversationKey(messages, "claude-opus-5-5")), undefined);
     } finally {
       await testServer.close();

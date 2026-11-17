@@ -60,6 +60,25 @@ Tool results can carry media too, in any of the shapes clients use:
 
 If the parked turn that made the tool calls is gone (shim restart, TTL), the next request relays the tool results and their media to Claude in a new prompt, and Claude continues from there.
 
+## Fast mode
+
+Models whose `supportsFastMode` comes back from the agent SDK catalog appear twice in the snippet, e.g. `claude-opus-5-5` and `claude-opus-5-5:fast`. The `:fast` id resolves to the base model with Claude Code's `fastMode` settings flag turned on for that turn (see [fast mode](https://code.claude.com/docs/en/fast-mode)): supported on Opus 5.5, Opus 5 and Opus 4.8, billed to usage credits. When fast mode can't run, the request silently falls back to standard speed — the shim logs `fast_mode` state in the debug log.
+
+## Parameters
+
+What each request field does:
+
+| Field | Behavior |
+| --- | --- |
+| `reasoning_effort` / `reasoning.effort` | Passed as the SDK `effort` option (`low`–`max`); any other value falls back to Claude Code's default (see the table above) |
+| `response_format: { type: "json_schema" }` | Passed as the SDK `outputFormat`; Claude validates and retries, the parsed object is returned as the response `content`. Other values return 400 |
+| `tool_choice: "none"` | No Zed tools are registered for the turn |
+| `parallel_tool_calls: false` | The turn-level instruction becomes "at most one tool call at a time" |
+| `stream_options`, `n`, `seed`, `logit_bias`, … | Ignored |
+| `temperature`, `top_p`, `stop`, `max_tokens` | Not forwarded: the Claude Code harness does not expose sampling controls (the temperature slider does nothing here) |
+
+Shim-composed prompts (`<tool_results>` relays, transferred history, title/summary/commit utility turns) are marked `client_composed: true`, so Claude Code delivers them as written — no `@path` expansion, no slash-command dispatch. Your own messages go through Claude Code's normal handling.
+
 ## Commands
 
 | Command           | What it does                              |

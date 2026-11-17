@@ -242,6 +242,7 @@ export type StartClaudeQueryParams = {
   persistSession?: boolean;
   isolateMcp?: boolean;
   thinking?: { type: "adaptive" } | { type: "enabled"; budgetTokens: number } | { type: "disabled" };
+  outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
   queryImpl?: (mod: SdkModule) => unknown;
 };
 
@@ -308,6 +309,16 @@ export async function startClaudeQuery(params: StartClaudeQueryParams): Promise<
 
   if (params.thinking) {
     options.thinking = params.thinking;
+  }
+
+  if (
+    params.outputFormat &&
+    params.outputFormat.type === "json_schema" &&
+    params.outputFormat.schema &&
+    typeof params.outputFormat.schema === "object" &&
+    !Array.isArray(params.outputFormat.schema)
+  ) {
+    options.outputFormat = { type: "json_schema", schema: params.outputFormat.schema };
   }
 
   if (params.autoCompactEnabled === false) {

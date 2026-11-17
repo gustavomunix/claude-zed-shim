@@ -70,7 +70,6 @@ export function buildOpenCodeSnippet(models: ModelInfo[], port: number, provider
           },
           capabilities: {
             tools: true,
-            temperature: true,
             input: ["text", "image"],
           },
         },

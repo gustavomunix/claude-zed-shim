@@ -3,7 +3,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { checkSubscriptionAuth } from "./auth.ts";
 import { buildClaudeCodeChildEnv } from "./env.ts";
 import { debugLog } from "./log.ts";
-import { getClaudeModels, refreshModelsFromCli, resolveClaudeModelId } from "./models.ts";
+import { getClaudeModels, isFastModelId, refreshModelsFromCli, resolveClaudeModelId } from "./models.ts";
 import {
   buildZedMcpServer,
   buildToolAliases,
@@ -122,22 +122,54 @@ export type ChatBody = {
   messages: ZedMessage[];
   tools: ZedOpenAITool[];
   stream: boolean;
-  temperature?: number;
   reasoning_effort?: string;
+  tool_choice?: string;
+  parallel_tool_calls?: boolean;
+  outputFormat?: { type: "json_schema"; schema: Record<string, unknown> };
 };
+
+export function parseResponseFormat(raw: unknown): ChatBody["outputFormat"] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object") throw new Error("response_format must be an object");
+  const rf = raw as Record<string, unknown>;
+  if (rf.type !== "json_schema") {
+    throw new Error('response_format must be { type: "json_schema", json_schema: { schema } }; other formats are not supported');
+  }
+  const jsonSchema =
+    rf.json_schema && typeof rf.json_schema === "object" ? (rf.json_schema as Record<string, unknown>) : rf;
+  const schema = jsonSchema.schema;
+  if (!schema || typeof schema !== "object" || Array.isArray(schema)) {
+    throw new Error("response_format json_schema requires a schema object");
+  }
+  return { type: "json_schema", schema: schema as Record<string, unknown> };
+}
 
 export function parseChatBody(raw: unknown): ChatBody {
   if (!raw || typeof raw !== "object") throw new Error("Invalid JSON body");
   const body = raw as Record<string, unknown>;
   const messages = Array.isArray(body.messages) ? (body.messages as ZedMessage[]) : [];
   if (messages.length === 0) throw new Error("No user/model content to send");
+  const reasoning =
+    body.reasoning && typeof body.reasoning === "object" ? (body.reasoning as { effort?: unknown }) : undefined;
+  const reasoningEffort =
+    typeof body.reasoning_effort === "string"
+      ? body.reasoning_effort
+      : typeof reasoning?.effort === "string"
+        ? reasoning.effort
+        : undefined;
+  const toolChoice = body.tool_choice;
+  const toolChoiceNone =
+    toolChoice === "none" ||
+    (toolChoice && typeof toolChoice === "object" && (toolChoice as { type?: unknown }).type === "none");
   return {
     model: typeof body.model === "string" && body.model ? body.model : "sonnet",
     messages,
     tools: Array.isArray(body.tools) ? (body.tools as ZedOpenAITool[]) : [],
     stream: body.stream !== false,
-    ...(typeof body.temperature === "number" ? { temperature: body.temperature } : {}),
-    ...(typeof body.reasoning_effort === "string" ? { reasoning_effort: body.reasoning_effort } : {}),
+    ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
+    ...(toolChoiceNone ? { tool_choice: "none" as const } : {}),
+    ...(body.parallel_tool_calls === false ? { parallel_tool_calls: false as const } : {}),
+    ...(parseResponseFormat(body.response_format) ? { outputFormat: parseResponseFormat(body.response_format) } : {}),
   };
 }
 
@@ -201,7 +233,8 @@ type MappedEvent =
   | { kind: "reasoning"; text: string }
   | { kind: "park"; tools: ParkedToolCall[] }
   | { kind: "usage-delta"; usage: OpenAIUsage; messageId: string | null }
-  | { kind: "usage"; usage: OpenAIUsage }
+  | { kind: "usage"; usage: OpenAIUsage; structured?: unknown }
+  | { kind: "retry"; attempt: number; maxRetries: number; delayMs: number; status: number | null }
   | { kind: "error"; text: string }
   | { kind: "ignore" };
 
@@ -226,14 +259,31 @@ function mapSdkEvent(event: unknown, state: MapState): MappedEvent {
     state.producedContent = true;
     return { kind: "park", tools: e.tools as ParkedToolCall[] };
   }
+  if (e.type === "system" && e.subtype === "api_retry") {
+    return {
+      kind: "retry",
+      attempt: typeof e.attempt === "number" && Number.isFinite(e.attempt) ? e.attempt : 0,
+      maxRetries: typeof e.max_retries === "number" && Number.isFinite(e.max_retries) ? e.max_retries : 0,
+      delayMs: typeof e.retry_delay_ms === "number" && Number.isFinite(e.retry_delay_ms) ? e.retry_delay_ms : 0,
+      status: typeof e.error_status === "number" ? e.error_status : null,
+    };
+  }
   if (e.type === "result") {
     if (!e.parent_tool_use_id && typeof e.stop_reason === "string") state.stopReason = e.stop_reason;
+    if (e.fast_mode_state || e.fast_mode_disabled_reason) {
+      debugLog("fast_mode", { state: e.fast_mode_state, disabled_reason: e.fast_mode_disabled_reason });
+    }
     if (e.is_error) {
-      const text = typeof e.error === "string" ? e.error : "Claude turn failed";
+      const fromErrors = Array.isArray(e.errors)
+        ? e.errors.find((item) => typeof item === "string" && item.length > 0)
+        : null;
+      const text =
+        (typeof fromErrors === "string" && fromErrors) ||
+        (typeof e.error === "string" ? e.error : typeof e.result === "string" ? e.result : "Claude turn failed");
       return { kind: "error", text };
     }
     const usage = usageFromSdkResult(event);
-    if (usage) return { kind: "usage", usage };
+    if (usage) return { kind: "usage", usage, structured: e.structured_output };
     return { kind: "ignore" };
   }
   if (e.type === "stream_event" && e.event && typeof e.event === "object") {
@@ -329,7 +379,9 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
 
   const messages = body.messages;
   const requestedModel = body.model;
-  const model = resolveClaudeModelId(requestedModel.replace(/^claude-code\//, ""));
+  const strippedModel = requestedModel.replace(/^claude-code\//, "");
+  const fastMode = isFastModelId(strippedModel);
+  const model = resolveClaudeModelId(strippedModel);
   const stream = body.stream;
   const metaKind = detectMetaRequestKind(messages);
   const key = metaKind ? `meta:${randomUUID()}` : conversationKey(messages, model);
@@ -397,7 +449,7 @@ async function handleChat(req: IncomingMessage, res: ServerResponse): Promise<vo
 
   const releaseSpawnLock = await acquireSpawnLock(key);
   try {
-    await startNewTurn({ body, messages, key, model, requestedModel, stream, toolResults, configDir, metaKind, res });
+    await startNewTurn({ body, messages, key, model, requestedModel, stream, fastMode, toolResults, configDir, metaKind, res });
   } finally {
     releaseSpawnLock();
   }
@@ -410,12 +462,13 @@ async function startNewTurn(input: {
   model: string;
   requestedModel: string;
   stream: boolean;
+  fastMode: boolean;
   toolResults: Map<string, McpToolResultContent[]>;
   configDir?: string;
   metaKind: MetaRequestKind;
   res: ServerResponse;
 }): Promise<void> {
-  const { body, messages, key, model, requestedModel, stream, configDir, metaKind, res } = input;
+  const { body, messages, key, model, requestedModel, stream, fastMode, configDir, metaKind, res } = input;
   const isMeta = metaKind !== null;
   const existing = findBridgeByConversation(key);
   if (existing) {
@@ -457,7 +510,7 @@ async function startNewTurn(input: {
     for (const resolve of waiters) resolve();
   };
 
-  const openCodeTools = isMeta ? [] : body.tools;
+  const openCodeTools = isMeta || body.tool_choice === "none" ? [] : body.tools;
   const answeredStep = isMeta ? null : answeredToolStepIndex(messages);
   let prompt: string | SdkUserPrompt = isMeta
     ? buildMetaPrompt(metaKind!, messages)
@@ -557,7 +610,12 @@ async function startNewTurn(input: {
   try {
     handle = withGracefulStop(
       await getClaudeQueryStarter()({
-        prompt: typeof claudePrompt === "string" ? claudePrompt : promptAsStream(claudePrompt),
+        prompt:
+          isMeta && typeof claudePrompt === "string"
+            ? promptAsStream(claudePrompt, true)
+            : typeof claudePrompt === "string"
+              ? claudePrompt
+              : promptAsStream(claudePrompt),
         cwd,
         model,
         resume: isMeta ? undefined : resume,
@@ -567,6 +625,8 @@ async function startNewTurn(input: {
         isolateMcp: true,
         settingSources: isMeta ? [] : ["project"],
         effort: isMeta ? undefined : body.reasoning_effort,
+        fastMode: fastMode || undefined,
+        outputFormat: isMeta ? undefined : body.outputFormat,
         skills: isMeta ? [] : undefined,
         persistSession: isMeta ? false : undefined,
         maxTurns: isMeta ? 1 : undefined,
@@ -581,7 +641,13 @@ async function startNewTurn(input: {
               type: "preset",
               preset: "claude_code",
               excludeDynamicSections: true,
-              append: "Built-in Claude Code tools are disabled. Use only the mcp__zed__* tools provided for this turn. Batch independent tool calls into a single turn.",
+              append:
+                "Built-in Claude Code tools are disabled. Use only the mcp__zed__* tools provided for this turn." +
+                (openCodeTools.length === 0
+                  ? ""
+                  : body.parallel_tool_calls === false
+                    ? " Make at most one tool call at a time: wait for each result before deciding on the next call."
+                    : " Batch independent tool calls into a single turn."),
             },
       }),
     );
@@ -797,6 +863,11 @@ async function relayStreamToResponse(
     }
   }, 5_000);
   heartbeat.unref?.();
+  let responseDone = false;
+  res.on("close", () => {
+    if (responseDone || bridge.pendingTools.size > 0) return;
+    void stopBridge(bridge.id, "Client disconnected before the turn finished");
+  });
   try {
     for await (const event of events) {
       const mapped = mapSdkEvent(event, mapState);
@@ -828,6 +899,10 @@ async function relayStreamToResponse(
       if (mapped.kind === "usage") {
         resultUsage = mapped.usage;
       }
+      if (mapped.kind === "retry") {
+        const label = mapped.status ?? "connection";
+        res.write(`: retry ${label} attempt ${mapped.attempt}/${mapped.maxRetries} in ${Math.round(mapped.delayMs / 1000)}s\n\n`);
+      }
       if (mapped.kind === "error") {
         emit(JSON.stringify({ error: { message: mapped.text, type: "claude_error" } }));
         finishReason = finishReasonFor(mapState.stopReason);
@@ -850,6 +925,7 @@ async function relayStreamToResponse(
   } finally {
     clearInterval(heartbeat);
   }
+  responseDone = true;
   res.end("data: [DONE]\n\n");
 }
 
@@ -860,12 +936,18 @@ async function streamTurnResponse(events: AsyncIterable<unknown>, model: string,
 async function collectTurnResponse(events: AsyncIterable<unknown>, model: string, bridge: ParkedBridge, res: ServerResponse): Promise<void> {
   const id = `chatcmpl_${createHash("sha1").update(bridge.id).digest("hex").slice(0, 24)}`;
   const created = Math.floor(Date.now() / 1000);
+  let responseDone = false;
+  res.on("close", () => {
+    if (responseDone || bridge.pendingTools.size > 0) return;
+    void stopBridge(bridge.id, "Client disconnected before the turn finished");
+  });
   let content = "";
   const toolCalls: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }> = [];
   const tracker = new TurnUsageTracker(bridge.reportedUsage);
   let resultUsage: OpenAIUsage | null = null;
   const mapState: MapState = { messageId: null };
   let errorText: string | null = null;
+  let structuredOutput: unknown;
   for await (const event of events) {
     const mapped = mapSdkEvent(event, mapState);
     if (mapped.kind === "park") {
@@ -878,6 +960,7 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
       tracker.add(mapped.usage, mapped.messageId);
     } else if (mapped.kind === "usage") {
       resultUsage = mapped.usage;
+      if (mapped.structured !== undefined) structuredOutput = mapped.structured;
     } else if (mapped.kind === "error") {
       errorText = mapped.text;
     }
@@ -889,6 +972,9 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
     sendError(res, status, errorText);
     return;
   }
+  if (!content && toolCalls.length === 0 && structuredOutput !== undefined) {
+    content = JSON.stringify(structuredOutput, null, 2);
+  }
   const usage = resolveTurnUsage(tracker.total(), resultUsage) ?? {
     prompt_tokens: 0,
     completion_tokens: 0,
@@ -896,6 +982,7 @@ async function collectTurnResponse(events: AsyncIterable<unknown>, model: string
   };
   debugLog("usage", { ...usage });
   res.writeHead(200, { "Content-Type": "application/json" });
+  responseDone = true;
   res.end(openAICompletion(id, created, model, content, toolCalls, usage, mapState.stopReason));
 }
 

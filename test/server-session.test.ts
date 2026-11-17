@@ -2,7 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { appendFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { mockHandle, startTestServer } from "./helpers/server.ts";
+import { mockHandle, promptText, startTestServer } from "./helpers/server.ts";
 import { findBridgeByConversation } from "../src/pool.ts";
 import { conversationKey, getSessionTurns } from "../src/store.ts";
 import { userHistoryFingerprints } from "../src/translate.ts";
@@ -69,7 +69,7 @@ describe("session resume", () => {
       ]);
       assert.equal(third.status, 200);
       assert.equal(captured?.resume, undefined);
-      assert.match(String(captured?.prompt), /User:\none/);
+      assert.match(await promptText(captured?.prompt), /User:\none/);
     } finally {
       await testServer.close();
     }
@@ -112,7 +112,7 @@ describe("session resume", () => {
       });
       await post(testServer.port, rewind);
       assert.equal(captured?.resume, undefined);
-      assert.match(String(captured?.prompt), /User:\none/);
+      assert.match(await promptText(captured?.prompt), /User:\none/);
     } finally {
       await testServer.close();
     }

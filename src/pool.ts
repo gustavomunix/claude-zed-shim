@@ -134,8 +134,3 @@ export function parkedTurnTtlMs(): number | null {
   if (!Number.isFinite(raw) || raw < 0) return 3_600_000;
   return raw === 0 ? null : raw;
 }
-
-export function structuredOutputReapMs(): number {
-  const raw = Number(process.env.OPENCODE_CLAUDE_STRUCTURED_OUTPUT_REAP_MS);
-  return Number.isFinite(raw) && raw >= 0 ? raw : 60_000;
-}

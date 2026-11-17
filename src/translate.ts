@@ -10,16 +10,19 @@ export type SdkUserPrompt = {
   type: "user";
   message: { role: "user"; content: string | AnthropicContentBlock[] };
   parent_tool_use_id: null;
+  client_composed?: true;
 };
 
 export async function* promptAsStream(
   prompt: string | SdkUserPrompt,
+  composed = false,
 ): AsyncGenerator<SdkUserPrompt, void, unknown> {
   if (typeof prompt === "string") {
     yield {
       type: "user",
       message: { role: "user", content: prompt },
       parent_tool_use_id: null,
+      ...(composed ? { client_composed: true as const } : {}),
     };
     return;
   }
@@ -461,16 +464,20 @@ export function withConversationContext(
     ? "These messages were added to this chat after your last turn, without you. Treat them as part of the conversation — do not re-do completed work — and respond to the user's latest message, which follows them.\n\n"
     : "The earlier conversation of this chat is included below because the previous Claude session could not be resumed. Treat it as established context — do not re-do completed work — and respond to the user's latest message, which follows the history.\n\n";
   const prefix = "<conversation_history>\n" + intro + body + "\n</conversation_history>\n\nLatest user message:\n";
-  if (typeof prompt === "string") return prefix + prompt;
+  if (typeof prompt === "string") {
+    return {
+      type: "user",
+      message: { role: "user", content: prefix + prompt },
+      parent_tool_use_id: null,
+      client_composed: true,
+    };
+  }
   const content = Array.isArray(prompt.message.content) ? prompt.message.content : [];
-  return { ...prompt, message: { role: "user", content: [{ type: "text", text: prefix }, ...content] } };
-}
-
-export function withLeadingText(prompt: string | SdkUserPrompt, text: string): string | SdkUserPrompt {
-  if (!text) return prompt;
-  if (typeof prompt === "string") return `${text}\n\n${prompt}`;
-  const content = Array.isArray(prompt.message.content) ? prompt.message.content : [{ type: "text" as const, text: prompt.message.content }];
-  return { ...prompt, message: { role: "user", content: [{ type: "text", text }, ...content] } };
+  return {
+    ...prompt,
+    message: { role: "user", content: [{ type: "text", text: prefix }, ...content] },
+    client_composed: true,
+  };
 }
 
 export const SYNTHETIC_TOOL_MEDIA_PROMPT = "Attached media from tool result:";
@@ -704,6 +711,7 @@ export function answeredToolStepPrompt(
     type: "user",
     message: { role: "user", content },
     parent_tool_use_id: null,
+    client_composed: true,
   };
 }
 
